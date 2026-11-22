@@ -28,6 +28,24 @@ data class SuccessMetrics(
     val closedWithReserveShare: Double?
 )
 
+/** Cost of letting a task sit idle, shown on the hero card and in the card sheet. */
+data class DelayCost(
+    val idleHours: Double,
+    val baseLoadPerDay: Double,
+    val currentLoadPerDay: Double,
+    val chance: Double
+) {
+    val rush: Boolean get() = currentLoadPerDay > 6.0
+}
+
+/** One bucket of the task pool: reserve and chronic-postponement rate per file type. */
+data class PoolEntry(
+    val key: String,
+    val count: Int,
+    val reserveDays: Double?,
+    val chronicShare: Double
+)
+
 enum class PaceTone { AHEAD, ON_TIME, BEHIND, NO_DATA }
 
 data class Pace(val tone: PaceTone, val days: Double)
@@ -148,4 +166,57 @@ object Progress {
             closedWithReserveShare = withReserve.toDouble() / closed.size
         )
     }
+
+    /** Tasks started while the window was already burning but still closed on time. */
+    fun pulledFromFire(tasks: List<ProgressTask>): Int = tasks.count { task ->
+        val started = task.startedAt ?: return@count false
+        val closedAt = task.closedAt ?: return@count false
+        task.status == TaskStatus.DONE &&
+            WindowProgress.isBurning(task.windowStart, task.deadline, started) &&
+            closedAt <= task.deadline
+    }
+
+    /**
+     * Cost of delay for an open task: how long it sat idle, the workload it implied when the
+     * window opened versus what is left, and the chance of closing it in time.
+     */
+    fun delayCost(task: ProgressTask, now: Long, difficultyFactor: Double = 1.5): DelayCost {
+        val idleMillis = now - (task.startedAt ?: task.windowStart)
+        val idleHours = (idleMillis.toDouble() / HOUR_MS).coerceAtLeast(0.0)
+        val estimateHours = task.difficulty.coerceIn(1, 5) * difficultyFactor
+        val windowDays = ((task.deadline - task.windowStart).toDouble() / DAY_MS).coerceAtLeast(0.25)
+        val leftDays = ((task.deadline - now).toDouble() / DAY_MS).coerceAtLeast(0.25)
+        val base = estimateHours / windowDays
+        val current = estimateHours / leftDays
+        // 55% at the window start, +7.5 points per difficulty level, -2 points per idle hour.
+        val chance = (0.55 + 0.075 * task.difficulty - 0.02 * idleHours).coerceIn(0.15, 0.9)
+        return DelayCost(
+            idleHours = idleHours,
+            baseLoadPerDay = base,
+            currentLoadPerDay = current,
+            chance = chance
+        )
+    }
+
+    /**
+     * Groups already-bucketed tasks and reports reserve plus chronic-postponement share.
+     * The caller supplies the grouping key (file type), so the domain stays free of naming rules.
+     *
+     * @param groups key -> tasks in that group
+     * @param postponedCounts key -> how many times tasks in that group were postponed
+     */
+    fun pool(
+        groups: Map<String, List<ProgressTask>>,
+        now: Long,
+        postponedCounts: Map<String, Int>
+    ): List<PoolEntry> = groups.map { (key, list) ->
+        val closed = list.filter { it.status == TaskStatus.DONE && it.closedAt != null }
+        val reserve = if (closed.isEmpty()) null else weightedReserveDays(closed)
+        val postponed = postponedCounts[key] ?: 0
+        val lateShare = if (closed.isEmpty()) 0.0
+        else closed.count { reserveDays(it, now) < 0.0 }.toDouble() / closed.size
+        val chronic = (postponed.toDouble() / list.size.coerceAtLeast(1) * 0.6 + lateShare * 0.4)
+            .coerceIn(0.0, 1.0)
+        PoolEntry(key = key, count = list.size, reserveDays = reserve, chronicShare = chronic)
+    }.sortedByDescending { it.chronicShare }
 }

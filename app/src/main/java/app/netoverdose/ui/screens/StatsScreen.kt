@@ -149,7 +149,8 @@ fun StatsScreen(viewModel: StatsViewModel = viewModel(), onOpenTask: (Long) -> U
                         modifier = Modifier.padding(top = 6.dp)
                     )
                 } else {
-                    ItalicAccent(signedReserve(reserve), size = 46.sp)
+                    // Positive reserve is gradient text per the reference (.grad); negative keeps danger.
+                    ItalicAccent(signedReserve(reserve), size = 46.sp, gradient = reserve >= 0)
                     Text(
                         ru(stringResource(R.string.stats_reserve_caption)),
                         style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp, letterSpacing = 0.7.sp),

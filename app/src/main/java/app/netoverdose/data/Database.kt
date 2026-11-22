@@ -31,7 +31,12 @@ data class TaskEntity(
     val remindOnWindowStart: Boolean,
     val createdAt: Long,
     val startedAt: Long?,
-    val closedAt: Long?
+    val closedAt: Long?,
+    /** Manual drag-and-drop position in the plan list (v4). */
+    val orderIndex: Int = 0,
+    /** Active 15-minute sprint on this task, or null (v4). */
+    val sprintStartedAt: Long? = null,
+    val sprintEndsAt: Long? = null
 ) : OpenTask
 
 @Entity(
@@ -94,6 +99,14 @@ data class IdeaEntity(
     val situation: String = "",
     val hits: Int = 1,
     val lastHitAt: Long = 0L
+)
+
+/** Free-form note pinned to a calendar day, shown in the day sheet (v4). */
+@Entity(tableName = "notes")
+data class NoteEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val at: Long,
+    val text: String
 )
 
 class Converters {
@@ -173,6 +186,8 @@ interface EventDao {
     @Insert suspend fun insert(event: EventEntity)
     @Query("SELECT * FROM events ORDER BY at DESC LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<EventEntity>>
+    @Query("SELECT * FROM events ORDER BY at DESC")
+    fun observeAllDesc(): Flow<List<EventEntity>>
     @Query("SELECT * FROM events ORDER BY at ASC")
     suspend fun all(): List<EventEntity>
     @Query("DELETE FROM events") suspend fun clear()
@@ -196,6 +211,22 @@ interface IdeaDao {
     @Update suspend fun update(idea: IdeaEntity)
     @Query("DELETE FROM ideas WHERE id = :id") suspend fun delete(id: Long)
     @Query("DELETE FROM ideas") suspend fun clear()
+}
+
+@Dao
+interface NoteDao {
+    @Query("SELECT * FROM notes ORDER BY at ASC")
+    fun observeAll(): Flow<List<NoteEntity>>
+
+    @Query("SELECT * FROM notes WHERE at >= :from AND at < :to ORDER BY at ASC")
+    suspend fun between(from: Long, to: Long): List<NoteEntity>
+
+    @Query("SELECT * FROM notes ORDER BY at ASC")
+    suspend fun all(): List<NoteEntity>
+
+    @Insert suspend fun insert(note: NoteEntity): Long
+    @Query("DELETE FROM notes WHERE id = :id") suspend fun delete(id: Long)
+    @Query("DELETE FROM notes") suspend fun clear()
 }
 
 /** v1 -> v2: ideas table added. Manual migration, no destructive fallback. */
@@ -235,15 +266,58 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+/**
+ * v3 -> v4: plan ordering, sprint columns on tasks, and the notes table.
+ * The tasks table is rebuilt so the new columns keep the order and defaults Room expects.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `tasks_new` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`title` TEXT NOT NULL, " +
+                "`difficulty` INTEGER NOT NULL, " +
+                "`windowStart` INTEGER NOT NULL, " +
+                "`deadline` INTEGER NOT NULL, " +
+                "`status` TEXT NOT NULL, " +
+                "`remindOnWindowStart` INTEGER NOT NULL, " +
+                "`createdAt` INTEGER NOT NULL, " +
+                "`startedAt` INTEGER, " +
+                "`closedAt` INTEGER, " +
+                "`orderIndex` INTEGER NOT NULL, " +
+                "`sprintStartedAt` INTEGER, " +
+                "`sprintEndsAt` INTEGER)"
+        )
+        db.execSQL(
+            "INSERT INTO `tasks_new` (`id`, `title`, `difficulty`, `windowStart`, `deadline`, " +
+                "`status`, `remindOnWindowStart`, `createdAt`, `startedAt`, `closedAt`, " +
+                "`orderIndex`, `sprintStartedAt`, `sprintEndsAt`) " +
+                "SELECT `id`, `title`, `difficulty`, `windowStart`, `deadline`, " +
+                "`status`, `remindOnWindowStart`, `createdAt`, `startedAt`, `closedAt`, " +
+                "0, NULL, NULL FROM `tasks`"
+        )
+        db.execSQL("DROP TABLE `tasks`")
+        db.execSQL("ALTER TABLE `tasks_new` RENAME TO `tasks`")
+
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `notes` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`at` INTEGER NOT NULL, " +
+                "`text` TEXT NOT NULL)"
+        )
+    }
+}
+
 @Database(
     entities = [
         TaskEntity::class,
         AttachmentEntity::class,
         StepEntity::class,
         EventEntity::class,
-        IdeaEntity::class
+        IdeaEntity::class,
+        NoteEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -253,4 +327,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun steps(): StepDao
     abstract fun events(): EventDao
     abstract fun ideas(): IdeaDao
+    abstract fun notes(): NoteDao
 }

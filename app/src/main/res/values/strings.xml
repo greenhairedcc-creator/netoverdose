@@ -37,6 +37,7 @@
     <string name="size_mb">%1$s МБ</string>
     <string name="file_none">—</string>
     <string name="file_missing">без файла</string>
+    <string name="file_type_meta">файл %1$s</string>
     <string name="difficulty_cd">сложность %1$d из 5</string>
     <string name="wave_cd">окно прошло на %1$d процентов</string>
 
@@ -49,6 +50,7 @@
     <string name="label_remind">Напомнить о начале окна</string>
     <string name="deadline_today">Сегодня</string>
     <string name="deadline_tomorrow">Завтра</string>
+    <string name="deadline_monday">Пн</string>
     <string name="deadline_custom">Своя</string>
     <string name="diff_1">1 — разминка, пятнадцать минут</string>
     <string name="diff_2">2 — лёгкая, можно между парами</string>
@@ -69,8 +71,6 @@
     <string name="more_notifications">Уведомления</string>
     <string name="more_notifications_on">Включены · окно и дедлайн за 24 и 3 ч</string>
     <string name="more_notifications_off">Выключены · напоминания не придут</string>
-    <string name="more_demo">Сбросить демо-данные</string>
-    <string name="more_demo_cap">Вернуть исходные задачи и историю</string>
     <string name="more_about">О приложении</string>
     <string name="more_about_cap">netoverdose · сборка 0.3</string>
     <string name="about_quote">Горизонт вместо тревоги.</string>

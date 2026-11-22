@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.netoverdose.domain.TaskRulesSortTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-11-22T15:43:21.244Z" hostname="WINDOSE20" time="0.012">
+  <properties/>
+  <testcase name="filtersNextWeekOnly" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.005"/>
+  <testcase name="heroesFallBackToNearestPlanned" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.001"/>
+  <testcase name="searchMatchesTitleCaseInsensitive" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.002"/>
+  <testcase name="reorderIgnoresUnknownIds" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.001"/>
+  <testcase name="sortsByTitleCaseInsensitive" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.0"/>
+  <testcase name="postponedTasksAreNotListed" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.001"/>
+  <testcase name="reorderProducesSequentialIndexes" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.0"/>
+  <testcase name="sortsByDeadline" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.0"/>
+  <testcase name="closedTasksAreNeverListed" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.0"/>
+  <testcase name="heroesReturnAllRunningTasks" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.001"/>
+  <testcase name="filtersBurningOnly" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.0"/>
+  <testcase name="sortsByManualOrder" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.0"/>
+  <testcase name="sortsByDifficultyDescendingThenDeadline" classname="app.netoverdose.domain.TaskRulesSortTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

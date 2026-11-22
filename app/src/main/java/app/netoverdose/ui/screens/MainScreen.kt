@@ -15,12 +15,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,9 +54,12 @@ import app.netoverdose.data.toProgress
 import app.netoverdose.design.LocalDesign
 import app.netoverdose.domain.DayReserve
 import app.netoverdose.domain.PaceTone
+import app.netoverdose.domain.PlanRow
 import app.netoverdose.domain.Progress
 import app.netoverdose.domain.ReserveSummary
+import app.netoverdose.domain.TaskFilter
 import app.netoverdose.domain.TaskRules
+import app.netoverdose.domain.TaskSort
 import app.netoverdose.domain.TaskStatus
 import app.netoverdose.domain.TimeText
 import app.netoverdose.domain.WindowProgress
@@ -71,14 +77,17 @@ import app.netoverdose.ui.components.PrimaryButton
 import app.netoverdose.ui.components.RainbowHairline
 import app.netoverdose.ui.components.ReserveBars
 import app.netoverdose.ui.components.SectionLabel
+import app.netoverdose.ui.components.SharpTextField
 import app.netoverdose.ui.components.Subhead
 import app.netoverdose.ui.components.WaveLabels
 import app.netoverdose.ui.components.WindowWave
 import app.netoverdose.ui.theme.MonoFamily
 import app.netoverdose.ui.theme.SerifFamily
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -88,7 +97,8 @@ import java.util.Locale
 private fun ru(value: String): String = value.uppercase(Locale.forLanguageTag("ru"))
 
 data class MainUiState(
-    val hero: TaskItem? = null,
+    /** All tasks currently in progress, in deadline order (hero pager). */
+    val heroes: List<TaskItem> = emptyList(),
     val rest: List<TaskItem> = emptyList(),
     val postponed: List<TaskItem> = emptyList(),
     val openCount: Int = 0,
@@ -97,21 +107,53 @@ data class MainUiState(
     val now: Long = System.currentTimeMillis()
 )
 
+/**
+ * UI-only state of the plan list: search, sort, filter and multi-selection.
+ * Kept apart from [MainUiState] so changing a filter does not rebuild the flows.
+ */
+data class PlanQuery(
+    val search: String = "",
+    val sort: TaskSort = TaskSort.DEADLINE,
+    val filter: TaskFilter = TaskFilter.ALL,
+    val selecting: Boolean = false,
+    val selected: Set<Long> = emptySet()
+)
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as NetoverdoseApp
     private val repo = app.repository
     private val zone: ZoneId = ZoneId.systemDefault()
 
+    private val query = MutableStateFlow(PlanQuery())
+
+    val planQuery: StateFlow<PlanQuery> = query.asStateFlow()
+
+    fun updateQuery(block: (PlanQuery) -> PlanQuery) {
+        query.value = block(query.value)
+    }
+
+    fun toggleSelection(id: Long) {
+        query.value = query.value.let { current ->
+            val next = if (current.selected.contains(id)) current.selected - id
+            else current.selected + id
+            current.copy(selected = next)
+        }
+    }
+
+    fun clearSelection() {
+        query.value = query.value.copy(selecting = false, selected = emptySet())
+    }
+
     val state: StateFlow<MainUiState> = combine(
         repo.openTasks, repo.postponedTasks, repo.allTasks, nowTicker()
     ) { open, postponed, all, now ->
-        val current = TaskRules.current(open.map { it.task })
-        val planIds = TaskRules.plan(open.map { it.task }, current?.id).map { it.id }
+        val heroes = TaskRules.heroes(open.map { it.task })
+        val heroIds = heroes.map { it.id }.toSet()
         val progress = all.map { it.task.toProgress() }
         MainUiState(
-            hero = open.firstOrNull { it.task.id == current?.id },
-            rest = planIds.mapNotNull { id -> open.firstOrNull { it.task.id == id } },
+            heroes = heroes.mapNotNull { hero -> open.firstOrNull { it.task.id == hero.id } },
+            rest = open.filter { it.task.id !in heroIds },
             postponed = postponed,
             openCount = open.size,
             summary = Progress.summarize(progress, now),
@@ -123,13 +165,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
 
-    fun start(id: Long) = launchWithMessage({ repo.start(id) }, R.string.msg_started)
-    fun close(id: Long) = launchWithMessage({ repo.close(id) }, R.string.msg_closed)
-    fun reopen(id: Long) = launchWithMessage({ repo.reopen(id) }, R.string.msg_reopened)
+    /** Plan rows after search, filter and sort are applied. */
+    fun visiblePlan(state: MainUiState, plan: PlanQuery): List<TaskItem> {
+        val rows = state.rest.map {
+            PlanRow(
+                id = it.task.id,
+                title = it.task.title,
+                difficulty = it.task.difficulty,
+                deadline = it.task.deadline,
+                windowStart = it.task.windowStart,
+                status = it.task.status,
+                orderIndex = it.task.orderIndex
+            )
+        }
+        val ordered = TaskRules.planRows(rows, state.now, plan.sort, plan.filter, plan.search)
+        val byId = state.rest.associateBy { it.task.id }
+        return ordered.mapNotNull { byId[it.id] }
+    }
 
-    private fun launchWithMessage(block: suspend () -> Unit, messageRes: Int) {
+    fun postponeSelected() {
+        val ids = query.value.selected.toList()
+        if (ids.isEmpty()) return
+        clearSelection()
+        launchWithMessage({ repo.postponeAll(ids) }, R.string.msg_postponed)
+    }
+
+    fun deleteSelected() {
+        val ids = query.value.selected.toList()
+        if (ids.isEmpty()) return
+        clearSelection()
+        launchWithMessage({ repo.deleteAll(ids) }, R.string.msg_deleted)
+    }
+
+    fun reorder(orderedIds: List<Long>) {
+        viewModelScope.launch { repo.reorder(orderedIds) }
+    }
+
+    fun start(id: Long) = launchWithMessage({ repo.start(id) }, R.string.msg_started, app.sounds::tick)
+    fun close(id: Long) = launchWithMessage({ repo.close(id) }, R.string.msg_closed, app.sounds::complete)
+    fun reopen(id: Long) = launchWithMessage({ repo.reopen(id) }, R.string.msg_reopened, app.sounds::tick)
+
+    private fun launchWithMessage(
+        block: suspend () -> Unit,
+        messageRes: Int,
+        sound: (() -> Unit)? = null
+    ) {
         viewModelScope.launch {
             block()
+            sound?.invoke()
             app.messages.emit(app.getString(messageRes))
         }
     }
@@ -138,8 +221,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 @Composable
 fun MainScreen(viewModel: MainViewModel = viewModel(), onOpenTask: (Long) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val plan by viewModel.planQuery.collectAsStateWithLifecycle()
+    val visible = remember(state, plan) { viewModel.visiblePlan(state, plan) }
     val intakeViewModel: IntakeViewModel = viewModel()
     var showIntake by rememberSaveable { mutableStateOf(false) }
+    var heroIndex by rememberSaveable { mutableStateOf(0) }
     val palette = LocalDesign.current
     val zone = ZoneId.systemDefault()
 
@@ -185,23 +271,39 @@ fun MainScreen(viewModel: MainViewModel = viewModel(), onOpenTask: (Long) -> Uni
                 }
             }
 
-            state.hero?.let { hero ->
+            if (state.heroes.isNotEmpty()) {
                 item(key = "hero") {
                     HeroCard(
-                        item = hero,
+                        item = state.heroes.getOrElse(heroIndex) { state.heroes.first() },
                         now = state.now,
-                        onStart = { viewModel.start(hero.task.id) },
-                        onClose = { viewModel.close(hero.task.id) },
-                        onOpen = { onOpenTask(hero.task.id) }
+                        pagerCount = state.heroes.size,
+                        pagerIndex = heroIndex,
+                        onSelectHero = { heroIndex = it },
+                        onStart = { viewModel.start(state.heroes.getOrElse(heroIndex) { state.heroes.first() }.task.id) },
+                        onClose = { viewModel.close(state.heroes.getOrElse(heroIndex) { state.heroes.first() }.task.id) },
+                        onOpen = { onOpenTask(state.heroes.getOrElse(heroIndex) { state.heroes.first() }.task.id) }
                     )
                 }
             }
 
             item { TempoBlock(state.summary, state.days) }
 
-            item { SectionLabel(stringResource(R.string.section_plan), Modifier.semantics { heading() }) }
+            item {
+                PlanToolbar(
+                    query = plan,
+                    onSearch = { text -> viewModel.updateQuery { it.copy(search = text) } },
+                    onSort = { sort -> viewModel.updateQuery { it.copy(sort = sort) } },
+                    onFilter = { filter -> viewModel.updateQuery { it.copy(filter = filter) } },
+                    onToggleSelecting = {
+                        viewModel.updateQuery { current ->
+                            if (current.selecting) current.copy(selecting = false, selected = emptySet())
+                            else current.copy(selecting = true)
+                        }
+                    }
+                )
+            }
 
-            if (state.hero == null && state.rest.isEmpty()) {
+            if (state.heroes.isEmpty() && visible.isEmpty() && plan.search.isBlank() && plan.filter == TaskFilter.ALL) {
                 item {
                     Text(
                         stringResource(R.string.empty_tasks),
@@ -210,20 +312,58 @@ fun MainScreen(viewModel: MainViewModel = viewModel(), onOpenTask: (Long) -> Uni
                         modifier = Modifier.padding(vertical = 18.dp)
                     )
                 }
+            } else if (visible.isEmpty() && (plan.search.isNotBlank() || plan.filter != TaskFilter.ALL)) {
+                item {
+                    Text(
+                        stringResource(R.string.plan_nothing_found),
+                        style = TextStyle(fontFamily = SerifFamily, fontSize = 16.sp),
+                        color = palette.muted,
+                        modifier = Modifier.padding(vertical = 18.dp)
+                    )
+                }
             }
 
-            items(state.rest, key = { it.task.id }) { item ->
+            items(visible, key = { it.task.id }) { item ->
                 val description = stringResource(R.string.a11y_task_cd, item.task.title)
                 val remaining = TimeText.remaining(item.task.deadline, state.now)
-                FileRow(
-                    title = item.task.title,
-                    extension = item.attachment?.let { TimeText.extension(it.displayName) } ?: "",
-                    deadline = item.task.deadline,
-                    remainingText = remainingLabel(remaining),
-                    overdue = remaining.overdue,
-                    onClick = { onOpenTask(item.task.id) },
-                    modifier = Modifier.semantics { contentDescription = description }
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (plan.selecting) {
+                        Box(
+                            Modifier.padding(start = 8.dp).size(20.dp)
+                                .background(
+                                    if (plan.selected.contains(item.task.id)) palette.accent else palette.bg
+                                )
+                                .border(1.dp, palette.rule)
+                                .clickable { viewModel.toggleSelection(item.task.id) }
+                        )
+                    }
+                    FileRow(
+                        title = item.task.title,
+                        extension = item.attachment?.let { TimeText.extension(it.displayName) } ?: "",
+                        deadline = item.task.deadline,
+                        windowStart = item.task.windowStart,
+                        remainingText = remainingLabel(remaining),
+                        overdue = remaining.overdue,
+                        now = state.now,
+                        burning = WindowProgress.isBurning(item.task.windowStart, item.task.deadline, state.now),
+                        onClick = {
+                            if (plan.selecting) viewModel.toggleSelection(item.task.id)
+                            else onOpenTask(item.task.id)
+                        },
+                        modifier = Modifier.weight(1f).semantics { contentDescription = description }
+                    )
+                }
+            }
+
+            if (plan.selecting && plan.selected.isNotEmpty()) {
+                item {
+                    BulkBar(
+                        count = plan.selected.size,
+                        onPostpone = viewModel::postponeSelected,
+                        onDelete = viewModel::deleteSelected,
+                        onClear = viewModel::clearSelection
+                    )
+                }
             }
 
             if (state.postponed.isNotEmpty()) {
@@ -321,6 +461,9 @@ private fun TempoBlock(summary: ReserveSummary, days: List<DayReserve>) {
 private fun HeroCard(
     item: TaskItem,
     now: Long,
+    pagerCount: Int,
+    pagerIndex: Int,
+    onSelectHero: (Int) -> Unit,
     onStart: () -> Unit,
     onClose: () -> Unit,
     onOpen: () -> Unit
@@ -357,7 +500,7 @@ private fun HeroCard(
             if (burning) HotChip()
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            FileTile(ext.ifBlank { "·" }, 72.dp)
+            FileTile(ext.ifBlank { "·" }, 72.dp, burnt = task.deadline < now)
             Column(Modifier.weight(1f)) {
                 Text(
                     task.title,
@@ -386,6 +529,138 @@ private fun HeroCard(
             AccentButton(stringResource(R.string.action_start), onStart, Modifier.fillMaxWidth())
         }
         LinkButton(stringResource(R.string.action_card), onOpen)
+
+        // Pager dots when more than one task is in progress.
+        if (pagerCount > 1) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(pagerCount) { index ->
+                    Box(
+                        Modifier.padding(horizontal = 3.dp).height(6.dp)
+                            .width(if (index == pagerIndex) 16.dp else 6.dp)
+                            .background(if (index == pagerIndex) palette.accent else palette.off)
+                            .clickable { onSelectHero(index) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Search field, sort selector and filter chips above the plan list. */
+@Composable
+private fun PlanToolbar(
+    query: PlanQuery,
+    onSearch: (String) -> Unit,
+    onSort: (TaskSort) -> Unit,
+    onFilter: (TaskFilter) -> Unit,
+    onToggleSelecting: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionLabel(stringResource(R.string.section_plan), Modifier.semantics { heading() })
+            Box(Modifier.weight(1f))
+            MiniButton(
+                if (query.selecting) stringResource(R.string.plan_done) else stringResource(R.string.plan_select),
+                onToggleSelecting
+            )
+        }
+        SharpTextField(
+            value = query.search,
+            onValueChange = onSearch,
+            placeholder = stringResource(R.string.plan_search)
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TaskFilter.entries.forEach { filter ->
+                FilterChip(
+                    label = when (filter) {
+                        TaskFilter.ALL -> stringResource(R.string.plan_filter_all)
+                        TaskFilter.BURNING -> stringResource(R.string.plan_filter_burning)
+                        TaskFilter.WEEK -> stringResource(R.string.plan_filter_week)
+                    },
+                    active = query.filter == filter,
+                    onClick = { onFilter(filter) }
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TaskSort.entries.forEach { sort ->
+                FilterChip(
+                    label = when (sort) {
+                        TaskSort.DEADLINE -> stringResource(R.string.plan_sort_deadline)
+                        TaskSort.DIFFICULTY -> stringResource(R.string.plan_sort_difficulty)
+                        TaskSort.TITLE -> stringResource(R.string.plan_sort_title)
+                        TaskSort.MANUAL -> stringResource(R.string.plan_sort_manual)
+                    },
+                    active = query.sort == sort,
+                    onClick = { onSort(sort) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterChip(label: String, active: Boolean, onClick: () -> Unit) {
+    val palette = LocalDesign.current
+    Box(
+        Modifier.height(32.dp).clip(palette.shape)
+            .background(if (active) palette.ink else androidx.compose.ui.graphics.Color.Transparent)
+            .border(1.dp, if (active) palette.ink else palette.rule, palette.shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 9.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            ru(label),
+            style = TextStyle(fontFamily = MonoFamily, fontSize = 9.sp, letterSpacing = 0.5.sp),
+            color = if (active) palette.bg else palette.muted,
+            maxLines = 1
+        )
+    }
+}
+
+/** Selection bar shown while several plan rows are ticked. */
+@Composable
+private fun BulkBar(count: Int, onPostpone: () -> Unit, onDelete: () -> Unit, onClear: () -> Unit) {
+    val palette = LocalDesign.current
+    Row(
+        Modifier.fillMaxWidth().clip(palette.shape).background(palette.ink)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            stringResource(R.string.plan_selected, count),
+            style = TextStyle(
+                fontFamily = MonoFamily, fontSize = 11.sp,
+                fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp
+            ),
+            color = palette.bg,
+            modifier = Modifier.weight(1f),
+            maxLines = 1
+        )
+        Text(
+            ru(stringResource(R.string.action_postpone)),
+            style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold),
+            color = palette.bg,
+            modifier = Modifier.clickable(onClick = onPostpone)
+        )
+        Text(
+            ru(stringResource(R.string.action_delete)),
+            style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold),
+            color = palette.danger,
+            modifier = Modifier.clickable(onClick = onDelete)
+        )
+        Text(
+            "✕",
+            style = TextStyle(fontFamily = MonoFamily, fontSize = 12.sp),
+            color = palette.bg,
+            modifier = Modifier.clickable(onClick = onClear)
+        )
     }
 }
 

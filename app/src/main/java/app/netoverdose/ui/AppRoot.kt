@@ -1,13 +1,19 @@
 package app.netoverdose.ui
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -22,6 +28,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,14 +45,16 @@ import androidx.navigation.navArgument
 import app.netoverdose.NetoverdoseApp
 import app.netoverdose.R
 import app.netoverdose.design.LocalDesign
+import app.netoverdose.ui.components.RainbowHairline
 import app.netoverdose.ui.screens.HorizonScreen
 import app.netoverdose.ui.screens.IdeasScreen
+import app.netoverdose.ui.screens.JournalScreen
 import app.netoverdose.ui.screens.LabScreen
 import app.netoverdose.ui.screens.MainScreen
 import app.netoverdose.ui.screens.MoreScreen
 import app.netoverdose.ui.screens.StatsScreen
 import app.netoverdose.ui.screens.StubScreen
-import app.netoverdose.ui.screens.TaskCardScreen
+import app.netoverdose.ui.screens.TaskCardSheet
 import app.netoverdose.ui.theme.MonoFamily
 import java.util.Locale
 
@@ -54,6 +65,7 @@ private object Routes {
     const val MORE = "more"
     const val LAB = "more/lab"
     const val IDEAS = "more/ideas"
+    const val JOURNAL = "more/journal"
     const val TASK = "task/{id}"
 
     fun task(id: Long) = "task/$id"
@@ -75,7 +87,19 @@ fun AppRoot(app: NetoverdoseApp) {
 
     Column(Modifier.fillMaxSize().background(palette.bg).statusBarsPadding()) {
         Box(Modifier.weight(1f)) {
-            NavHost(navController = navController, startDestination = Routes.MAIN, modifier = Modifier.fillMaxSize()) {
+            NavHost(
+                navController = navController,
+                startDestination = Routes.MAIN,
+                modifier = Modifier.fillMaxSize(),
+                // Cross-fade plus a small lift makes tab switches feel continuous.
+                enterTransition = {
+                    fadeIn(animationSpec = tween(220)) +
+                        slideInVertically(animationSpec = tween(260)) { it / 24 }
+                },
+                exitTransition = { fadeOut(animationSpec = tween(160)) },
+                popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+                popExitTransition = { fadeOut(animationSpec = tween(160)) }
+            ) {
                 composable(Routes.MAIN) {
                     MainScreen(
                         onOpenTask = { id -> navController.navigate(Routes.task(id)) }
@@ -90,8 +114,12 @@ fun AppRoot(app: NetoverdoseApp) {
                 composable(Routes.MORE) {
                     MoreScreen(
                         onOpenLab = { navController.navigate(Routes.LAB) },
-                        onOpenIdeas = { navController.navigate(Routes.IDEAS) }
+                        onOpenIdeas = { navController.navigate(Routes.IDEAS) },
+                        onOpenJournal = { navController.navigate(Routes.JOURNAL) }
                     )
+                }
+                composable(Routes.JOURNAL) {
+                    JournalScreen(onBack = { navController.popBackStack() })
                 }
                 composable(Routes.LAB) {
                     LabScreen(controller = app.designController, onBack = { navController.popBackStack() })
@@ -99,16 +127,28 @@ fun AppRoot(app: NetoverdoseApp) {
                 composable(Routes.IDEAS) {
                     IdeasScreen(onBack = { navController.popBackStack() })
                 }
+                // The destination must exist so task/{id} navigations and deep links resolve;
+                // it renders nothing because the card is drawn as an overlay below (B04).
                 composable(
                     Routes.TASK,
                     arguments = listOf(navArgument("id") { type = NavType.LongType })
-                ) {
-                    // The id travels through SavedStateHandle into TaskCardViewModel.
-                    TaskCardScreen(
-                        onBack = { navController.popBackStack() }
-                    )
-                }
+                ) { }
             }
+
+            // The card is an overlay above the current tab rather than a full screen (B04).
+            val taskEntry by navController.currentBackStackEntryAsState()
+            val taskId = remember(taskEntry) {
+                if (taskEntry?.destination?.route == Routes.TASK) {
+                    taskEntry?.arguments?.getLong("id")
+                } else null
+            }
+            if (taskId != null && taskId != 0L) {
+                TaskCardSheet(
+                    taskId = taskId,
+                    onDismiss = { navController.popBackStack() }
+                )
+            }
+
             SnackbarHost(
                 hostState = snackbar,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
@@ -145,26 +185,33 @@ private fun BottomNav(current: String, onSelect: (String) -> Unit) {
         Triple(Routes.STATS, R.string.nav_stats, "03"),
         Triple(Routes.MORE, R.string.nav_more, "04")
     )
-    Row(
-        Modifier.fillMaxWidth().background(palette.bg).navigationBarsPadding()
-            .padding(horizontal = palette.pad, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        items.forEach { (target, label, index) ->
-            val active = current == target
-            Box(
-                Modifier.weight(1f).clickable { onSelect(target) },
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        index,
-                        style = TextStyle(fontFamily = MonoFamily, fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                        color = if (active) palette.accentText else palette.muted
-                    )
+    Column(Modifier.fillMaxWidth().background(palette.backdrop).navigationBarsPadding()) {
+        // top rule + spectral underline on the active tab, as in the reference
+        Box(Modifier.fillMaxWidth().height(1.dp).background(palette.rule))
+        Row(
+            Modifier.fillMaxWidth().height(56.dp),
+            horizontalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
+            items.forEach { (target, label, _) ->
+                val active = current == target
+                Box(
+                    Modifier.weight(1f).fillMaxHeight()
+                        .semantics { selected = active }
+                        .clickable(role = Role.Tab) { onSelect(target) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (active) {
+                        RainbowHairline(
+                            Modifier.align(Alignment.TopCenter).fillMaxWidth(0.6f),
+                            alpha = palette.rainAlpha
+                        )
+                    }
                     Text(
                         stringResource(label).uppercase(Locale.forLanguageTag("ru")),
-                        style = TextStyle(fontFamily = MonoFamily, fontSize = 9.sp, letterSpacing = 0.5.sp),
+                        style = TextStyle(
+                            fontFamily = MonoFamily, fontSize = 11.sp, letterSpacing = 0.8.sp,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
+                        ),
                         color = if (active) palette.ink else palette.muted
                     )
                 }

@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,13 +18,18 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,7 +48,10 @@ import app.netoverdose.NetoverdoseApp
 import app.netoverdose.R
 import app.netoverdose.data.StoredAttachment
 import app.netoverdose.design.LocalDesign
+import app.netoverdose.domain.AutoDifficulty
 import app.netoverdose.domain.DeadlineOptions
+import app.netoverdose.domain.HistoryTask
+import app.netoverdose.domain.TimeText
 import app.netoverdose.ui.components.AccentButton
 import app.netoverdose.ui.components.ItalicAccent
 import app.netoverdose.ui.components.RainbowHairline
@@ -51,6 +60,7 @@ import app.netoverdose.ui.components.SegmentedControl
 import app.netoverdose.ui.components.SharpSwitch
 import app.netoverdose.ui.components.SharpTextField
 import app.netoverdose.ui.theme.MonoFamily
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.ZoneId
 
@@ -67,6 +77,49 @@ class IntakeViewModel(application: Application) : AndroidViewModel(application) 
     var customDeadline by mutableStateOf<Long?>(null)
     var attachment by mutableStateOf<StoredAttachment?>(null)
 
+    /** True once the user picks a level by hand; the auto estimate then stops overwriting it. */
+    var difficultyLocked by mutableStateOf(false)
+        private set
+
+    /** Reasons behind the current suggestion, shown as chips under the difficulty row. */
+    var reasons by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** Past tasks used as history for the estimate. */
+    private var history: List<HistoryTask> = emptyList()
+
+    init {
+        viewModelScope.launch {
+            history = app.repository.allTasks.first().map {
+                HistoryTask(it.task.title, it.task.difficulty)
+            }
+        }
+    }
+
+    /** Picks a level by hand and freezes the estimate. */
+    fun pickDifficulty(level: Int) {
+        difficulty = level
+        difficultyLocked = true
+        reasons = emptyList()
+    }
+
+    /** Re-runs the heuristic whenever the title, file or deadline changes. */
+    fun refreshEstimate() {
+        if (difficultyLocked) return
+        val now = System.currentTimeMillis()
+        val deadline = resolveDeadline(now)
+        val guess = AutoDifficulty.estimate(
+            title = title.ifBlank { attachment?.displayName ?: "" },
+            fileSizeBytes = attachment?.sizeBytes,
+            deadline = deadline,
+            now = now,
+            endOfToday = DeadlineOptions.today(now, zone),
+            history = history
+        )
+        difficulty = guess.value - 1
+        reasons = guess.reasons
+    }
+
     fun reset() {
         title = ""
         difficulty = 2
@@ -74,17 +127,24 @@ class IntakeViewModel(application: Application) : AndroidViewModel(application) 
         deadlinePick = 1
         customDeadline = null
         attachment = null
+        difficultyLocked = false
+        reasons = emptyList()
+        refreshEstimate()
     }
 
     fun attach(uri: Uri) {
         viewModelScope.launch {
             runCatching { app.repository.attach(uri) }
-                .onSuccess { attachment = it }
+                .onSuccess {
+                    attachment = it
+                    refreshEstimate()
+                }
                 .onFailure { app.messages.emit(app.getString(R.string.msg_attach_failed)) }
         }
     }
 
     fun save(onSaved: () -> Unit) {
+        if (!canSave) return
         val now = System.currentTimeMillis()
         val name = title.trim().ifEmpty {
             attachment?.displayName ?: app.getString(R.string.hint_title)
@@ -97,6 +157,7 @@ class IntakeViewModel(application: Application) : AndroidViewModel(application) 
                 remind = remind,
                 stored = attachment
             )
+            app.sounds.confirm()
             app.messages.emit(app.getString(R.string.msg_saved))
             onSaved()
         }
@@ -107,6 +168,14 @@ class IntakeViewModel(application: Application) : AndroidViewModel(application) 
         1 -> DeadlineOptions.tomorrow(now, zone)
         2 -> DeadlineOptions.nextMonday(now, zone)
         else -> customDeadline ?: DeadlineOptions.tomorrow(now, zone)
+    }
+
+    /** A custom date is mandatory when the "Своя" segment is chosen, so Save stays disabled until then. */
+    val canSave: Boolean
+        get() = deadlinePick != CUSTOM_PICK || customDeadline != null
+
+    companion object {
+        const val CUSTOM_PICK = 3
     }
 }
 
@@ -148,7 +217,10 @@ fun IntakeSheet(
             Box(Modifier.fillMaxWidth()) {
                 SharpTextField(
                     value = viewModel.title,
-                    onValueChange = { viewModel.title = it },
+                    onValueChange = { text ->
+                        viewModel.title = text
+                        viewModel.refreshEstimate()
+                    },
                     placeholder = stringResource(R.string.hint_title)
                 )
             }
@@ -158,12 +230,22 @@ fun IntakeSheet(
                 options = listOf(
                     stringResource(R.string.deadline_today),
                     stringResource(R.string.deadline_tomorrow),
-                    "Пн",
+                    stringResource(R.string.deadline_monday),
                     stringResource(R.string.deadline_custom)
                 ),
                 selected = viewModel.deadlinePick,
                 onSelect = { viewModel.deadlinePick = it }
             )
+
+            // The picker lives inside the sheet: a nested DatePickerDialog would be drawn
+            // behind the bottom sheet and swallow the selection (B01).
+            if (viewModel.deadlinePick == IntakeViewModel.CUSTOM_PICK) {
+                CustomDateBlock(
+                    selected = viewModel.customDeadline,
+                    zone = ZoneId.systemDefault(),
+                    onSelect = { viewModel.customDeadline = it }
+                )
+            }
 
             SectionLabel(stringResource(R.string.label_difficulty))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -173,7 +255,7 @@ fun IntakeSheet(
                         Modifier.weight(1f).height(40.dp).clip(palette.shape)
                             .background(if (active) palette.ink else Color.Transparent)
                             .border(1.dp, if (active) palette.ink else palette.rule, palette.shape)
-                            .clickable { viewModel.difficulty = level - 1 },
+                            .clickable { viewModel.pickDifficulty(level - 1) },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -189,6 +271,27 @@ fun IntakeSheet(
                 style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp, lineHeight = 15.sp),
                 color = palette.muted
             )
+            if (viewModel.reasons.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    viewModel.reasons.forEach { reason ->
+                        Box(
+                            Modifier.clip(palette.shape).background(palette.tile)
+                                .border(1.dp, palette.rule, palette.shape)
+                                .padding(horizontal = 7.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                reason,
+                                style = TextStyle(fontFamily = MonoFamily, fontSize = 9.sp, letterSpacing = 0.4.sp),
+                                color = palette.accentText,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
 
             Row(
                 Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -220,7 +323,8 @@ fun IntakeSheet(
             AccentButton(
                 text = stringResource(R.string.action_save),
                 onClick = { viewModel.save(onSaved) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = viewModel.canSave
             )
         }
     }
@@ -228,6 +332,83 @@ fun IntakeSheet(
     // keeps the scope referenced so lint does not flag it while state is hoisted
     @Suppress("UNUSED_EXPRESSION")
     scope
+}
+
+/**
+ * Inline calendar for the "Своя" deadline. Selecting a day converts the picker's UTC date
+ * to the local end of that day, matching the other deadline presets.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomDateBlock(selected: Long?, zone: ZoneId, onSelect: (Long) -> Unit) {
+    val palette = LocalDesign.current
+    val today = remember {
+        java.time.Instant.ofEpochMilli(System.currentTimeMillis()).atZone(zone).toLocalDate()
+    }
+    val initial = remember(selected) {
+        selected
+            ?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+            ?: today.plusDays(1)
+    }
+    val pickerState = rememberDatePickerState(
+        initialSelectedDateMillis = DeadlineOptions.toUtcDate(initial)
+    )
+
+    // Mirror the picker selection into the form so Save can enable itself.
+    LaunchedEffect(pickerState.selectedDateMillis) {
+        val picked = pickerState.selectedDateMillis ?: return@LaunchedEffect
+        onSelect(DeadlineOptions.fromUtcDate(picked, zone))
+    }
+
+    Column(
+        Modifier.fillMaxWidth().clip(palette.shape).border(1.dp, palette.rule, palette.shape)
+            .padding(bottom = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        DatePicker(
+            state = pickerState,
+            showModeToggle = false,
+            title = {
+                Text(
+                    stringResource(R.string.deadline_pick_day),
+                    style = TextStyle(fontFamily = MonoFamily, fontSize = 11.sp),
+                    color = palette.muted,
+                    modifier = Modifier.padding(start = 16.dp, top = 12.dp)
+                )
+            },
+            headline = null,
+            modifier = Modifier.fillMaxWidth(),
+            colors = DatePickerDefaults.colors(
+                containerColor = palette.bg,
+                titleContentColor = palette.muted,
+                headlineContentColor = palette.ink,
+                weekdayContentColor = palette.muted,
+                subheadContentColor = palette.muted,
+                navigationContentColor = palette.ink,
+                yearContentColor = palette.text,
+                currentYearContentColor = palette.accentText,
+                selectedYearContentColor = palette.onAccent,
+                selectedYearContainerColor = palette.accent,
+                dayContentColor = palette.text,
+                selectedDayContentColor = palette.onAccent,
+                selectedDayContainerColor = palette.accent,
+                todayContentColor = palette.accentText,
+                todayDateBorderColor = palette.accentText
+            )
+        )
+        selected?.let {
+            Text(
+                stringResource(
+                    R.string.deadline_chosen,
+                    TimeText.dayLabel(it, zone),
+                    TimeText.dateShort(it, zone)
+                ),
+                style = TextStyle(fontFamily = MonoFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                color = palette.accentText,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+        }
+    }
 }
 
 private fun difficultyLabel(index: Int): Int = when (index) {

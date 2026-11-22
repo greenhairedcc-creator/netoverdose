@@ -30,9 +30,13 @@ data class DesignTokens(
     val italics: Boolean = true,
     val slant: Int = 8,
     val radius: Int = 0,
+    val tileRadius: Int = 10,
     val density: Int = 1,
     val wave: Int = 55,
-    val glow: Int = 45
+    val glow: Int = 45,
+    val hatch: Boolean = true,
+    val peaks: Boolean = true,
+    val motion: Int = 100
 )
 
 data class DesignState(val tokens: DesignTokens = DesignTokens(), val preset: String = "ice")
@@ -56,7 +60,8 @@ object DesignPresets {
             cold = r(40, 100), accentHue = r(0, 360), rainbow = r(30, 100), sharp = r(50, 100),
             grain = r(20, 70), grid = Random.nextInt(10) > 1, dark = Random.nextInt(4) == 0,
             italics = true, slant = r(0, 14), radius = if (Random.nextInt(10) < 6) 0 else r(2, 10),
-            density = r(0, 2), wave = r(20, 90), glow = r(10, 80)
+            density = r(0, 2), wave = r(20, 90), glow = r(10, 80),
+            tileRadius = r(4, 18), hatch = true, peaks = true, motion = r(50, 100)
         )
     }
 }
@@ -86,14 +91,20 @@ data class DesignPalette(
     val grainAlpha: Float,
     val gridAlpha: Float,
     val waveDurationMs: Int,
+    /** Slide period for gradient text; 0 when motion is disabled. */
+    val gradientDurationMs: Int,
     val slantDeg: Float,
     val shape: Shape,
+    val tileShape: Shape,
     val pad: Dp,
     val rowPad: Dp,
     val gap: Dp,
     val italics: Boolean,
     val dark: Boolean,
-    val sharp: Int
+    val sharp: Int,
+    val hatch: Boolean,
+    val peaks: Boolean,
+    val motion: Float
 )
 
 val LocalDesign = staticCompositionLocalOf<DesignPalette> {
@@ -150,15 +161,19 @@ object DesignEngine {
             guard++
         }
 
-        var fillLight = if (dark) 62f else 46f
+        // Filled accent (buttons). Only the label contrast matters: `onAccent` is picked to suit
+        // the fill. Search *away* from mid-tone in small steps so the fill stays recognisably
+        // the accent colour instead of washing out to near-white on dark themes.
+        var fillLight = if (dark) 56f else 46f
         var accent = hsl(t.accentHue.toFloat(), 88f, fillLight)
+        var onAccent = if (contrast(Color.White, accent) >= contrast(ink, accent)) Color.White else ink
         guard = 0
-        while (max(contrast(Color.White, accent), contrast(ink, accent)) < 4.5f && guard < 32) {
-            fillLight = (fillLight + if (dark) 2f else -2f).coerceIn(0f, 100f)
+        while (contrast(onAccent, accent) < 4.5f && guard < 40) {
+            fillLight = (fillLight + if (dark) -2f else -2f).coerceIn(6f, 72f)
             accent = hsl(t.accentHue.toFloat(), 88f, fillLight)
+            onAccent = if (contrast(Color.White, accent) >= contrast(ink, accent)) Color.White else ink
             guard++
         }
-        val onAccent = if (contrast(Color.White, accent) >= contrast(ink, accent)) Color.White else ink
 
         val spectrumSat = t.rainbow * 0.92f
         val spectrumLight = if (dark) 60f else 52f
@@ -187,14 +202,37 @@ object DesignEngine {
             grainAlpha = (t.grain / 100f) * (0.5f + t.sharp / 100f * 0.9f) * 0.16f,
             gridAlpha = if (t.grid) 0.05f + t.sharp / 100f * 0.09f else 0f,
             waveDurationMs = if (t.wave == 0) 0 else 14000 - t.wave * 110,
+            gradientDurationMs = if (t.motion == 0) 0 else 16000 - t.motion * 90,
             slantDeg = t.slant.toFloat(),
             shape = RoundedCornerShape(t.radius.dp),
+            tileShape = RoundedCornerShape(t.tileRadius.dp),
+            hatch = t.hatch,
+            peaks = t.peaks,
+            motion = t.motion / 100f,
             pad = pads.dp, rowPad = rowPads.dp, gap = gaps.dp,
             italics = t.italics, dark = dark, sharp = t.sharp
         )
     }
 
     fun solid(color: Color): Brush = SolidColor(color)
+
+    private const val HOUR_MS = 3_600_000L
+    private const val DAY_MS = 86_400_000L
+
+    /**
+     * Colour of a remaining-time label, matching the reference's urgency ramp:
+     * overdue or under 3h = danger, under 24h or window past 75% = warn,
+     * under 72h = amber, otherwise success.
+     */
+    fun urgency(deadline: Long, windowStart: Long, now: Long, p: DesignPalette): Color {
+        val left = deadline - now
+        if (left <= 0L) return p.danger
+        if (left < 3 * HOUR_MS) return p.danger
+        val length = (deadline - windowStart).coerceAtLeast(1L)
+        if (left < DAY_MS || left.toFloat() / length.toFloat() < 0.25f) return p.warn
+        if (left < 3 * DAY_MS) return if (p.dark) hsl(45f, 88f, 58f) else hsl(45f, 88f, 42f)
+        return p.success
+    }
 
     private fun hardStops(colors: List<Color>): Array<Pair<Float, Color>> {
         val stops = ArrayList<Pair<Float, Color>>(colors.size * 2)
@@ -302,12 +340,14 @@ class DesignController(context: Context) {
             appendLine("  --wave-duration-ms: ${p.waveDurationMs};")
             appendLine("  --slant-deg: ${p.slantDeg};")
             appendLine("  --radius-dp: ${t.radius};")
+            appendLine("  --tile-radius-dp: ${t.tileRadius};")
             appendLine("  --pad-dp: ${p.pad.value};")
             appendLine("}")
             appendLine(
                 "/* raw: cold=${t.cold} hue=${t.accentHue} rainbow=${t.rainbow} sharp=${t.sharp} " +
                     "grain=${t.grain} grid=${t.grid} dark=${t.dark} italics=${t.italics} slant=${t.slant} " +
-                    "radius=${t.radius} density=${t.density} wave=${t.wave} glow=${t.glow} */"
+                    "radius=${t.radius} tile=${t.tileRadius} density=${t.density} wave=${t.wave} " +
+                    "glow=${t.glow} hatch=${t.hatch} peaks=${t.peaks} motion=${t.motion} */"
             )
         }
     }
@@ -327,7 +367,11 @@ class DesignController(context: Context) {
             radius = prefs.getInt("radius", d.radius),
             density = prefs.getInt("density", d.density),
             wave = prefs.getInt("wave", d.wave),
-            glow = prefs.getInt("glow", d.glow)
+            glow = prefs.getInt("glow", d.glow),
+            tileRadius = prefs.getInt("tileRadius", d.tileRadius),
+            hatch = prefs.getBoolean("hatch", d.hatch),
+            peaks = prefs.getBoolean("peaks", d.peaks),
+            motion = prefs.getInt("motion", d.motion)
         )
         return DesignState(tokens, prefs.getString("preset", "ice") ?: "ice")
     }
@@ -339,6 +383,8 @@ class DesignController(context: Context) {
             .putBoolean("dark", t.dark).putBoolean("italics", t.italics).putInt("slant", t.slant)
             .putInt("radius", t.radius).putInt("density", t.density).putInt("wave", t.wave)
             .putInt("glow", t.glow).putString("preset", preset)
+            .putInt("tileRadius", t.tileRadius).putBoolean("hatch", t.hatch)
+            .putBoolean("peaks", t.peaks).putInt("motion", t.motion)
             .apply()
     }
 }

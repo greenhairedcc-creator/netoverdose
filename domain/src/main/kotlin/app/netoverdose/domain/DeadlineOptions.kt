@@ -29,4 +29,8 @@ object DeadlineOptions {
     /** Material DatePicker returns UTC midnight; convert to local end of day. */
     fun fromUtcDate(utcMillis: Long, zone: ZoneId): Long =
         endOfDay(Instant.ofEpochMilli(utcMillis).atZone(ZoneOffset.UTC).toLocalDate(), zone)
+
+    /** Inverse of [fromUtcDate]: local date -> UTC midnight, as DatePicker expects. */
+    fun toUtcDate(date: LocalDate): Long =
+        date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 }

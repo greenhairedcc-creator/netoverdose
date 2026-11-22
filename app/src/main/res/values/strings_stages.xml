@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="tempo_label">Темп</string>
-    <string name="tempo_ahead_head">Идёшь </string>
+    <string name="tempo_ahead_head">"Идёшь "</string>
     <string name="tempo_ahead_value">с запасом %1$s дня</string>
-    <string name="tempo_behind_head">Отстаёшь </string>
+    <string name="tempo_behind_head">"Отстаёшь "</string>
     <string name="tempo_behind_value">на %1$s дня</string>
     <string name="tempo_on_time">Идёшь вровень со сроками</string>
     <string name="tempo_no_data">Пока мало данных</string>
@@ -13,8 +13,8 @@
     <string name="forecast_open_calm">Темп позволяет успеть без спешки.</string>
     <string name="forecast_open_tight">Пора садиться — окно почти закрыто.</string>
     <string name="forecast_open_overdue">Окно закрылось — спасай результат.</string>
-    <string name="forecast_open_lead">Окно закрывается через %1$s. </string>
-    <string name="forecast_open_overdue_lead">Просрочено на %1$s. </string>
+    <string name="forecast_open_lead">"Окно закрывается через %1$s. "</string>
+    <string name="forecast_open_overdue_lead">"Просрочено на %1$s. "</string>
     <string name="forecast_done">Закрыто %1$s. Запас %2$s дня.</string>
     <string name="forecast_postponed">Отложено. Верни, когда появится час.</string>
 
@@ -80,6 +80,8 @@
     <string name="battery_action">Открыть настройки</string>
 
     <string name="a11y_back_cd">назад</string>
+    <string name="deadline_pick_day">Выбери день</string>
+    <string name="deadline_chosen">Дедлайн: %1$s · %2$s</string>
     <string name="a11y_task_cd">задача: %1$s</string>
     <string name="a11y_switch_cd">переключатель: %1$s</string>
     <string name="a11y_open_file_cd">открыть вложение</string>

@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="app.netoverdose.domain.DeadlineOptionsTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-21T19:19:25.304Z" hostname="WINDOSE20" time="0.033">
+<testsuite name="app.netoverdose.domain.DeadlineOptionsTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-11-22T15:43:21.181Z" hostname="WINDOSE20" time="0.023">
   <properties/>
-  <testcase name="nextMondayFromMondayJumpsWeek" classname="app.netoverdose.domain.DeadlineOptionsTest" time="0.025"/>
+  <testcase name="nextMondayFromMondayJumpsWeek" classname="app.netoverdose.domain.DeadlineOptionsTest" time="0.019"/>
   <testcase name="nextMondayFromSaturday" classname="app.netoverdose.domain.DeadlineOptionsTest" time="0.0"/>
-  <testcase name="tomorrowIsNextCalendarDay" classname="app.netoverdose.domain.DeadlineOptionsTest" time="0.001"/>
+  <testcase name="tomorrowIsNextCalendarDay" classname="app.netoverdose.domain.DeadlineOptionsTest" time="0.0"/>
+  <testcase name="pickerRoundTripReturnsSameDay" classname="app.netoverdose.domain.DeadlineOptionsTest" time="0.002"/>
   <testcase name="utcPickerDateBecomesLocalEndOfDay" classname="app.netoverdose.domain.DeadlineOptionsTest" time="0.0"/>
   <testcase name="todayEndsAt2359" classname="app.netoverdose.domain.DeadlineOptionsTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>

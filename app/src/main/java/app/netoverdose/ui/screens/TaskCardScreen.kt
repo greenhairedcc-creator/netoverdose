@@ -15,21 +15,27 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -47,12 +53,17 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.viewModelFactory
 import app.netoverdose.NetoverdoseApp
 import app.netoverdose.R
 import app.netoverdose.data.StepEntity
+import app.netoverdose.data.TaskEntity
 import app.netoverdose.data.TaskItem
 import app.netoverdose.data.nowTicker
 import app.netoverdose.data.toProgress
@@ -86,6 +97,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.ZoneId
+import kotlin.math.roundToInt
 
 data class CardUiState(
     val item: TaskItem? = null,
@@ -99,6 +111,16 @@ class TaskCardViewModel(application: Application, savedState: SavedStateHandle) 
     private val app = application as NetoverdoseApp
     private val taskId: Long = savedState.get<Long>("id") ?: 0L
 
+    companion object {
+        /** Builds the VM with an explicit id, for the overlay sheet where there is no SavedStateHandle. */
+        fun factory(taskId: Long): ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val app = this[APPLICATION_KEY] as NetoverdoseApp
+                TaskCardViewModel(app, SavedStateHandle(mapOf("id" to taskId)))
+            }
+        }
+    }
+
     val state: StateFlow<CardUiState> = combine(
         app.repository.observeTask(taskId),
         app.repository.steps(taskId),
@@ -110,6 +132,9 @@ class TaskCardViewModel(application: Application, savedState: SavedStateHandle) 
     fun close() = launchWithMessage({ app.repository.close(taskId) }, R.string.msg_closed)
     fun postpone() = launchWithMessage({ app.repository.postpone(taskId) }, R.string.msg_postponed)
     fun reopen() = launchWithMessage({ app.repository.reopen(taskId) }, R.string.msg_reopened)
+
+    fun startSprint() = launchWithMessage({ app.repository.startSprint(taskId) }, R.string.msg_sprint_started)
+    fun stopSprint() = launchWithMessage({ app.repository.stopSprint(taskId) }, R.string.msg_sprint_stopped)
 
     fun addStep(text: String, onDone: () -> Unit) {
         if (text.isBlank()) return
@@ -163,6 +188,54 @@ class TaskCardViewModel(application: Application, savedState: SavedStateHandle) 
 
 @Composable
 fun TaskCardScreen(viewModel: TaskCardViewModel = viewModel(), onBack: () -> Unit) {
+    AppBackground {
+        TaskCardBody(viewModel = viewModel, onBack = onBack)
+    }
+}
+
+/**
+ * Card presented as an overlay bottom sheet (B04): the tab underneath stays visible,
+ * the sheet takes up to 88% of the height, scrolls internally and can be dragged down.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TaskCardSheet(taskId: Long, onDismiss: () -> Unit) {
+    val palette = LocalDesign.current
+    val viewModel: TaskCardViewModel = viewModel(
+        key = "task-$taskId",
+        factory = TaskCardViewModel.factory(taskId)
+    )
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val scope = rememberCoroutineScope()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = palette.shape,
+        containerColor = palette.bg,
+        contentColor = palette.text,
+        scrimColor = Color.Black.copy(alpha = 0.5f),
+        dragHandle = {
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp)) {
+                Box(
+                    Modifier.align(Alignment.CenterHorizontally).width(40.dp).height(3.dp)
+                        .background(palette.rule)
+                )
+                RainbowHairline(Modifier.fillMaxWidth().padding(top = 8.dp), alpha = palette.rainAlpha)
+            }
+        }
+    ) {
+        TaskCardBody(
+            viewModel = viewModel,
+            onBack = {
+                scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+            }
+        )
+    }
+}
+
+@Composable
+private fun TaskCardBody(viewModel: TaskCardViewModel, onBack: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val palette = LocalDesign.current
     val context = LocalContext.current
@@ -172,36 +245,34 @@ fun TaskCardScreen(viewModel: TaskCardViewModel = viewModel(), onBack: () -> Uni
     val noAppText = stringResource(R.string.msg_no_app)
     val item = state.item
 
-    AppBackground {
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(horizontal = palette.pad, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+            .padding(horizontal = palette.pad, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                LinkButton(
-                    stringResource(R.string.action_back),
-                    onBack,
-                    Modifier.semantics { contentDescription = backCd }
-                )
-                if (item != null &&
-                    WindowProgress.isBurning(item.task.windowStart, item.task.deadline, state.now)
-                ) HotChip()
-            }
-            RainbowHairline(Modifier.fillMaxWidth(), alpha = palette.rainAlpha)
+            LinkButton(
+                stringResource(R.string.action_close),
+                onBack,
+                Modifier.semantics { contentDescription = backCd }
+            )
+            if (item != null &&
+                WindowProgress.isBurning(item.task.windowStart, item.task.deadline, state.now)
+            ) HotChip()
+        }
 
-            if (item == null) {
-                Text(
-                    stringResource(R.string.empty_tasks),
-                    style = TextStyle(fontFamily = SerifFamily, fontSize = 16.sp),
-                    color = palette.muted
-                )
-                return@Column
-            }
+        if (item == null) {
+            Text(
+                stringResource(R.string.empty_tasks),
+                style = TextStyle(fontFamily = SerifFamily, fontSize = 16.sp),
+                color = palette.muted
+            )
+            return@Column
+        }
 
             val task = item.task
             val attachment = item.attachment
@@ -263,6 +334,17 @@ fun TaskCardScreen(viewModel: TaskCardViewModel = viewModel(), onBack: () -> Uni
 
             ForecastText(task.toProgress(), state.now)
 
+            // Cost of delay + sprint control for open tasks.
+            if (task.status == TaskStatus.PLANNED || task.status == TaskStatus.IN_PROGRESS) {
+                DelayCostBlock(task = task, now = state.now)
+                SprintBlock(
+                    task = task,
+                    now = state.now,
+                    onStart = viewModel::startSprint,
+                    onStop = viewModel::stopSprint
+                )
+            }
+
             val showSteps = task.status != TaskStatus.DONE || state.steps.isNotEmpty()
             if (showSteps) {
                 StepsBlock(
@@ -304,33 +386,120 @@ fun TaskCardScreen(viewModel: TaskCardViewModel = viewModel(), onBack: () -> Uni
             )
             Box(Modifier.height(24.dp))
         }
-    }
 
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            shape = palette.shape,
-            containerColor = palette.bg,
-            titleContentColor = palette.ink,
-            textContentColor = palette.text,
-            title = {
-                Text(
-                    stringResource(R.string.delete_title),
-                    style = TextStyle(fontFamily = SerifFamily, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                )
-            },
-            text = { Text(stringResource(R.string.delete_text)) },
-            confirmButton = {
-                TextButton(
-                    onClick = { confirmDelete = false; viewModel.delete(onBack) },
-                    shape = palette.shape
-                ) { Text(stringResource(R.string.action_delete), color = palette.danger) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = false }, shape = palette.shape) {
-                    Text(stringResource(R.string.action_cancel), color = palette.muted)
+        if (confirmDelete) {
+            AlertDialog(
+                onDismissRequest = { confirmDelete = false },
+                shape = palette.shape,
+                containerColor = palette.bg,
+                titleContentColor = palette.ink,
+                textContentColor = palette.text,
+                title = {
+                    Text(
+                        stringResource(R.string.delete_title),
+                        style = TextStyle(fontFamily = SerifFamily, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                    )
+                },
+                text = { Text(stringResource(R.string.delete_text)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = { confirmDelete = false; viewModel.delete(onBack) },
+                        shape = palette.shape
+                    ) { Text(stringResource(R.string.action_delete), color = palette.danger) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDelete = false }, shape = palette.shape) {
+                        Text(stringResource(R.string.action_cancel), color = palette.muted)
+                    }
                 }
+            )
+        }
+}
+
+@Composable
+private fun DelayCostBlock(task: TaskEntity, now: Long) {
+    val palette = LocalDesign.current
+    val cost = Progress.delayCost(task.toProgress(), now)
+    val format = java.util.Locale.forLanguageTag("ru")
+    Column(
+        Modifier.fillMaxWidth().clip(palette.shape).border(1.dp, palette.rule, palette.shape)
+            .background(palette.tile).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SectionLabel(stringResource(R.string.waste_title))
+        Text(
+            stringResource(R.string.waste_idle, String.format(format, "%.1f", cost.idleHours)),
+            style = TextStyle(fontFamily = MonoFamily, fontSize = 11.sp),
+            color = palette.muted
+        )
+        // Chance bar
+        Box(Modifier.fillMaxWidth().height(4.dp).background(palette.off)) {
+            Box(
+                Modifier.fillMaxWidth(cost.chance.toFloat()).height(4.dp).background(palette.accent)
+            )
+        }
+        Text(
+            stringResource(R.string.waste_chance, (cost.chance * 100).roundToInt()),
+            style = TextStyle(fontFamily = MonoFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+            color = palette.accentText
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                stringResource(R.string.waste_load, String.format(format, "%.1f", cost.baseLoadPerDay)),
+                style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp),
+                color = palette.muted
+            )
+            Text(
+                stringResource(R.string.waste_load_now, String.format(format, "%.1f", cost.currentLoadPerDay)),
+                style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                color = if (cost.rush) palette.danger else palette.accentText
+            )
+        }
+        if (cost.rush) {
+            Text(
+                stringResource(R.string.waste_rush).uppercase(java.util.Locale.forLanguageTag("ru")),
+                style = TextStyle(fontFamily = MonoFamily, fontSize = 9.sp, letterSpacing = 0.5.sp),
+                color = palette.danger
+            )
+        }
+    }
+}
+
+/** 15-minute sprint control; while running, the wave shows its countdown. */
+@Composable
+private fun SprintBlock(
+    task: TaskEntity,
+    now: Long,
+    onStart: () -> Unit,
+    onStop: () -> Unit
+) {
+    val endsAt = task.sprintEndsAt
+    val running = endsAt != null && endsAt > now
+    val left = if (running) endsAt - now else 0L
+    val label = if (running) {
+        val minutes = left / 60_000L
+        val seconds = (left % 60_000L) / 1000L
+        "%02d:%02d".format(minutes, seconds)
+    } else stringResource(R.string.action_sprint)
+
+    if (running) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(Modifier.weight(1f)) {
+                PrimaryButton(label, onStop, Modifier.fillMaxWidth(), height = 44.dp)
             }
+            Box(Modifier.weight(1f)) {
+                OutlineButton(
+                    stringResource(R.string.action_sprint_stop), onStop,
+                    Modifier.fillMaxWidth(), height = 44.dp
+                )
+            }
+        }
+    } else {
+        OutlineButton(
+            label, onStart, Modifier.fillMaxWidth(), height = 44.dp
         )
     }
 }

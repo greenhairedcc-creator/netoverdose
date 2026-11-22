@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.netoverdose.domain.AutoDifficultyTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-11-22T15:43:21.110Z" hostname="WINDOSE20" time="0.068">
+  <properties/>
+  <testcase name="heavyBeatsMedium" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.033"/>
+  <testcase name="distantDeadlineSubtracts" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.0"/>
+  <testcase name="quantityBonusApplies" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.007"/>
+  <testcase name="twentyItemsAddTwo" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.001"/>
+  <testcase name="resultIsClampedToOneToFive" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.003"/>
+  <testcase name="heavyKeywordRaisesDifficulty" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.001"/>
+  <testcase name="singleSimilarTaskIsIgnored" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.001"/>
+  <testcase name="historyPullsTowardsAverage" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.013"/>
+  <testcase name="reasonsAreCappedAtFour" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.0"/>
+  <testcase name="lightKeywordIsOne" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.001"/>
+  <testcase name="labKeywordIsFour" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.0"/>
+  <testcase name="emptyTitleFallsBackToMiddle" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.0"/>
+  <testcase name="dueTodayAddsHalf" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.0"/>
+  <testcase name="bigFileAddsHalf" classname="app.netoverdose.domain.AutoDifficultyTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

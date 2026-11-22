@@ -6,13 +6,21 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.core.content.IntentCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import app.netoverdose.design.LocalDesign
 import app.netoverdose.ui.AppRoot
+import app.netoverdose.ui.components.StarfallSplash
 import app.netoverdose.ui.theme.NetoverdoseTheme
 import kotlinx.coroutines.launch
 
@@ -34,7 +42,15 @@ class MainActivity : ComponentActivity() {
                     controller.isAppearanceLightStatusBars = !palette.dark
                     controller.isAppearanceLightNavigationBars = !palette.dark
                 }
-                AppRoot(app)
+                // Cold boot shows the ASCII starfall once; a configuration change keeps the app.
+                var splashDone by rememberSaveable { mutableStateOf(false) }
+                Box(Modifier.fillMaxSize()) {
+                    if (splashDone) {
+                        AppRoot(app)
+                    } else {
+                        StarfallSplash(onFinished = { splashDone = true })
+                    }
+                }
             }
         }
     }

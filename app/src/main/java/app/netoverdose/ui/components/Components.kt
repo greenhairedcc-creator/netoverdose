@@ -1,5 +1,11 @@
 package app.netoverdose.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,16 +30,21 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -43,9 +55,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -53,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import app.netoverdose.design.LocalDesign
 import app.netoverdose.domain.WindowProgress
 import app.netoverdose.ui.theme.MonoFamily
+import app.netoverdose.ui.theme.SansFamily
 import app.netoverdose.ui.theme.SerifFamily
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -118,7 +135,10 @@ private fun DrawScope.drawGrain(alpha: Float) {
     }
 }
 
-/** 32-column waveform: filled part tracks elapsed window share. */
+/**
+ * 32-column waveform: the filled part tracks elapsed window share. A spectral sweep
+ * plus a slow hue drift keep the bars visibly alive (B5).
+ */
 @Composable
 fun WindowWave(
     windowStart: Long,
@@ -131,23 +151,81 @@ fun WindowWave(
     val filled = WindowProgress.filledColumns(windowStart, deadline, now)
     val percent = (WindowProgress.fraction(windowStart, deadline, now) * 100).roundToInt()
     val description = androidx.compose.ui.res.stringResource(app.netoverdose.R.string.wave_cd, percent)
+    val duration = palette.waveDurationMs
+
+    // Slow drift of the filled columns' hue; disabled when the wave speed token is 0.
+    val transition = rememberInfiniteTransition(label = "wave")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (duration > 0) duration else 1, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "wavePhase"
+    )
+    // Slow pulse for the "now" edge marker.
+    val edgePulse by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (duration > 0) 1800 else 1, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "edgePulse"
+    )
+
     Canvas(
         modifier.fillMaxWidth().height(height)
             .semantics { contentDescription = description }
     ) {
         val count = WindowProgress.COLUMNS
-        val slot = size.width / count
-        val barWidth = (slot * 0.56f).coerceAtLeast(1f)
-        WindowProgress.HEIGHTS.forEachIndexed { index, percent ->
-            val barHeight = size.height * (percent / 100f)
+        val gap = 2.dp.toPx()
+        val columnWidth = ((size.width - gap * (count - 1)) / count).coerceAtLeast(1f)
+        val overdue = deadline < now
+        val hatch = palette.hatch && overdue
+
+        for (index in 0 until count) {
+            val barHeight = size.height * WindowProgress.HEIGHTS[index] / 100f
+            val left = index * (columnWidth + gap)
             val top = size.height - barHeight
-            val left = index * slot + (slot - barWidth) / 2f
             val active = index < filled
-            drawRect(
-                color = if (active) palette.waveColors[index % palette.waveColors.size]
-                else palette.off.copy(alpha = 0.55f),
-                topLeft = Offset(left, top),
-                size = Size(barWidth, barHeight)
+            val color = if (active) {
+                // drift the spectrum so the filled part breathes
+                val shift = if (duration > 0) (phase * palette.waveColors.size).toInt() else 0
+                palette.waveColors[(index + shift) % palette.waveColors.size]
+            } else {
+                palette.off.copy(alpha = 0.55f)
+            }
+            drawRect(color, Offset(left, top), Size(columnWidth, barHeight))
+
+            // Burnt window: finished columns get a diagonal danger hatch instead of flat colour.
+            if (active && hatch) {
+                val stripe = 2.dp.toPx()
+                val period = 5.dp.toPx()
+                clipRect(left, top, left + columnWidth, size.height) {
+                    var offset = -barHeight
+                    while (offset < barHeight) {
+                        drawLine(
+                            color = palette.danger,
+                            start = Offset(left + offset, size.height),
+                            end = Offset(left + offset + barHeight, top),
+                            strokeWidth = stripe
+                        )
+                        offset += period
+                    }
+                }
+            }
+        }
+
+        // Edge marker: the exact moment "now" sits at, pulsing like the reference.
+        if (filled in 1 until count) {
+            val edgeX = filled * (columnWidth + gap) - gap / 2f
+            drawLine(
+                color = palette.ink.copy(alpha = 0.25f + 0.45f * edgePulse),
+                start = Offset(edgeX, -2.dp.toPx()),
+                end = Offset(edgeX, size.height + 2.dp.toPx()),
+                strokeWidth = 2.dp.toPx()
             )
         }
     }
@@ -156,7 +234,8 @@ fun WindowWave(
 @Composable
 fun RainbowHairline(modifier: Modifier = Modifier, alpha: Float = 1f) {
     val palette = LocalDesign.current
-    Box(modifier.height(2.dp).background(palette.rainbowBrush, alpha = alpha.coerceIn(0f, 1f)))
+    // rainbowHard gives the crisp 8-band ribbon from the reference rather than a soft blend.
+    Box(modifier.height(2.dp).background(palette.rainbowHard, alpha = alpha.coerceIn(0f, 1f)))
 }
 
 @Composable
@@ -171,40 +250,68 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ItalicAccent(text: String, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.TextUnit = 20.sp) {
+fun ItalicAccent(
+    text: String,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.TextUnit = 20.sp,
+    gradient: Boolean = false
+) {
     val palette = LocalDesign.current
     Text(
         text = text,
         modifier = modifier,
         style = TextStyle(
+            brush = if (gradient) palette.rainbowBrush else SolidColor(palette.ink),
             fontFamily = SerifFamily,
             fontStyle = if (palette.italics) FontStyle.Italic else FontStyle.Normal,
             fontWeight = FontWeight.Bold,
             fontSize = size,
-            lineHeight = size * 1.25f
-        ),
-        color = palette.ink
+            lineHeight = size * 1.35f
+        )
     )
 }
 
 @Composable
-fun BrandMark(modifier: Modifier = Modifier) {
+fun BrandMark(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.TextUnit = 22.sp) {
     val palette = LocalDesign.current
+    // "overdose" is gradient text in the reference (class .grad): a brush plus an animated
+    // background-position slide, so the spectrum visibly travels through the word.
+    val duration = palette.gradientDurationMs
+    val infinite = rememberInfiniteTransition(label = "brand")
+    val shift by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (duration > 0) duration else 1, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "brandShift"
+    )
+    val spectrum = palette.spectrum
+    // Repeat the ramp twice so the slide wraps without a visible seam.
+    val colors = spectrum + spectrum.first()
+    val offset = if (duration > 0) -shift * 400f else 0f
+    val brush = Brush.linearGradient(
+        colors = colors,
+        start = Offset(offset, 0f),
+        end = Offset(offset + 800f, 0f)
+    )
+
     Row(modifier, verticalAlignment = Alignment.Bottom) {
         Text(
             "net",
-            style = TextStyle(fontFamily = SerifFamily, fontWeight = FontWeight.Bold, fontSize = 22.sp),
+            style = TextStyle(fontFamily = SerifFamily, fontWeight = FontWeight.Bold, fontSize = size),
             color = palette.ink
         )
         Text(
             "overdose",
             style = TextStyle(
+                brush = brush,
                 fontFamily = SerifFamily,
                 fontWeight = FontWeight.Bold,
                 fontStyle = if (palette.italics) FontStyle.Italic else FontStyle.Normal,
-                fontSize = 22.sp
-            ),
-            color = palette.accentText
+                fontSize = size
+            )
         )
     }
 }
@@ -214,17 +321,26 @@ fun AccentButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    height: Dp = 48.dp
+    height: Dp = 48.dp,
+    enabled: Boolean = true
 ) {
     val palette = LocalDesign.current
+    // Press feedback: scale-down plus a synthesised tick, both gated by the motion/sound tokens.
+    val haptics = rememberHaptics()
     Box(
-        modifier.height(height).clip(palette.shape).background(palette.accent).clickable(role = Role.Button, onClick = onClick),
+        modifier.height(height).clip(palette.shape).pressScale(enabled = enabled)
+            .background(if (enabled) palette.accent else palette.off.copy(alpha = 0.55f))
+            .clickable(role = Role.Button, enabled = enabled) {
+                haptics()
+                onClick()
+            }
+            .semantics { if (!enabled) stateDescription = "disabled" },
         contentAlignment = Alignment.Center
     ) {
         Text(
             upper(text),
             style = TextStyle(fontFamily = MonoFamily, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp),
-            color = palette.onAccent
+            color = if (enabled) palette.onAccent else palette.muted
         )
     }
 }
@@ -284,23 +400,59 @@ fun SwatchDot(color: Color, size: Dp = 14.dp) {
     Box(Modifier.size(size).clip(CircleShape).background(color).border(1.dp, Color.Black.copy(alpha = 0.12f), CircleShape))
 }
 
+/** File tile: tile radius, spectral corner fold, danger hatch when the deadline burnt (reference). */
 @Composable
-fun FileTile(label: String, size: Dp = 44.dp) {
+fun FileTile(label: String, size: Dp = 44.dp, burnt: Boolean = false) {
     val palette = LocalDesign.current
     Box(
-        Modifier.size(size).clip(palette.shape).background(palette.tile).border(1.dp, palette.rule, palette.shape),
+        Modifier.size(size).clip(palette.tileShape).background(palette.tile)
+            .border(1.dp, palette.rule, palette.tileShape),
         contentAlignment = Alignment.Center
     ) {
+        Canvas(Modifier.matchParentSize()) {
+            val corner = 15.dp.toPx()
+            val path = Path().apply {
+                moveTo(this@Canvas.size.width, 0f)
+                lineTo(this@Canvas.size.width - corner, 0f)
+                lineTo(this@Canvas.size.width, corner)
+                close()
+            }
+            drawPath(path, palette.rainbowBrush, alpha = palette.rainAlpha)
+        }
+        if (burnt && palette.hatch) {
+            Canvas(Modifier.matchParentSize()) {
+                val side = this.size.width
+                val step = 4.dp.toPx()
+                var offset = -side
+                while (offset < side * 2f) {
+                    drawLine(
+                        color = palette.danger,
+                        start = Offset(offset, side),
+                        end = Offset(offset + side, 0f),
+                        strokeWidth = 2.dp.toPx()
+                    )
+                    offset += step
+                }
+            }
+        }
         Text(
             label,
-            style = TextStyle(fontFamily = MonoFamily, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
-            color = palette.muted,
+            style = TextStyle(
+                fontFamily = MonoFamily,
+                fontSize = if (size >= 64.dp) 13.sp else 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp
+            ),
+            color = palette.ink,
             maxLines = 1
         )
     }
 }
 
-/** Single-line sharp input field used by the ideas composer. */
+/**
+ * Single-line sharp input field. Uses SansFamily by default: the bundled mono font
+ * has no Cyrillic subset, so typing Russian in MonoFamily renders blanks (B02).
+ */
 @Composable
 fun SharpTextField(
     value: String,
@@ -312,10 +464,10 @@ fun SharpTextField(
 ) {
     val palette = LocalDesign.current
     val style = TextStyle(
-        fontFamily = if (serif) SerifFamily else MonoFamily,
+        fontFamily = if (serif) SerifFamily else SansFamily,
         fontWeight = if (serif) FontWeight.SemiBold else FontWeight.Normal,
-        fontSize = if (serif) 16.sp else 13.sp,
-        lineHeight = if (singleLine) TextUnit.Unspecified else 18.sp,
+        fontSize = if (serif) 16.sp else 14.sp,
+        lineHeight = if (singleLine) TextUnit.Unspecified else 19.sp,
         color = palette.ink
     )
     Box(
@@ -332,6 +484,11 @@ fun SharpTextField(
             singleLine = singleLine,
             textStyle = style,
             cursorBrush = SolidColor(palette.accent),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Text,
+                capitalization = KeyboardCapitalization.Sentences,
+                imeAction = if (singleLine) ImeAction.Done else ImeAction.Default
+            ),
             decorationBox = { inner ->
                 if (value.isEmpty()) {
                     Text(
@@ -500,31 +657,39 @@ fun DifficultySquares(level: Int, modifier: Modifier = Modifier, size: Dp = 8.dp
     }
 }
 
-/** Day labels under the waveform: window start on the left, deadline on the right. */
+/** Day labels under the waveform: window start, centred remaining (urgency toned), deadline. */
 @Composable
 fun WaveLabels(windowStart: Long, deadline: Long, now: Long, modifier: Modifier = Modifier) {
     val palette = LocalDesign.current
     val zone = java.time.ZoneId.systemDefault()
     val remaining = app.netoverdose.domain.TimeText.remaining(deadline, now)
     val value = when {
-        remaining.showDays -> "${remaining.days}d ${remaining.hours}h"
-        remaining.showHours -> "${remaining.hours}h ${remaining.minutes}m"
-        else -> "${remaining.minutes.coerceAtLeast(1)}m"
+        remaining.showDays ->
+            "${remaining.days}д ${remaining.hours.toString().padStart(2, '0')}ч"
+        remaining.showHours ->
+            "${remaining.hours}ч ${remaining.minutes.toString().padStart(2, '0')}м"
+        else -> "${remaining.minutes.coerceAtLeast(1)}м"
     }
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    val label = if (remaining.overdue) "Просрочено $value" else "Осталось $value"
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             app.netoverdose.domain.TimeText.dayLabel(windowStart, zone),
-            style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp),
-            color = palette.muted
+            style = TextStyle(fontFamily = MonoFamily, fontSize = 11.sp),
+            color = palette.muted,
+            modifier = Modifier.weight(1f)
         )
         Text(
-            "$value · ${app.netoverdose.domain.TimeText.dayLabel(deadline, zone)}",
-            style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold),
-            color = when {
-                remaining.overdue -> palette.danger
-                app.netoverdose.domain.WindowProgress.isBurning(windowStart, deadline, now) -> palette.warn
-                else -> palette.muted
-            }
+            label,
+            style = TextStyle(fontFamily = MonoFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold),
+            color = app.netoverdose.design.DesignEngine.urgency(deadline, windowStart, now, palette),
+            maxLines = 1
+        )
+        Text(
+            app.netoverdose.domain.TimeText.dayLabel(deadline, zone),
+            style = TextStyle(fontFamily = MonoFamily, fontSize = 11.sp),
+            color = palette.muted,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.weight(1f)
         )
     }
 }
@@ -535,41 +700,60 @@ fun FileRow(
     title: String,
     extension: String,
     deadline: Long,
+    windowStart: Long,
     remainingText: String,
     overdue: Boolean,
+    now: Long,
+    burning: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val palette = LocalDesign.current
-    val zone = java.time.ZoneId.systemDefault()
     Column(modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(vertical = palette.rowPad),
+            Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick)
+                .padding(vertical = palette.rowPad, horizontal = 8.dp)
+                .defaultMinSize(minHeight = 64.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            FileTile(extension.ifBlank { "·" })
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            FileTile(extension.ifBlank { "·" }, burnt = overdue)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     title,
-                    style = TextStyle(fontFamily = SerifFamily, fontWeight = FontWeight.SemiBold, fontSize = 15.sp),
+                    style = TextStyle(
+                        fontFamily = SerifFamily, fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp, lineHeight = 20.sp
+                    ),
                     color = palette.ink,
-                    maxLines = 1,
+                    minLines = 1,
+                    maxLines = 2,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
                 Text(
-                    "${app.netoverdose.domain.TimeText.dayLabel(deadline, zone)} · " +
-                        app.netoverdose.domain.TimeText.weekdayUpper(deadline, zone),
-                    style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp),
+                    if (extension.isBlank()) stringResourceOrFallback()
+                    else stringResource(app.netoverdose.R.string.file_type_meta, extension),
+                    style = TextStyle(fontFamily = MonoFamily, fontSize = 12.sp),
                     color = palette.muted
                 )
             }
-            Text(
-                remainingText,
-                style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                color = if (overdue) palette.danger else palette.muted
-            )
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (burning) HotChip()
+                Text(
+                    remainingText,
+                    style = TextStyle(
+                        fontFamily = MonoFamily, fontSize = 12.sp,
+                        fontWeight = if (overdue) FontWeight.Bold else FontWeight.Medium
+                    ),
+                    color = app.netoverdose.design.DesignEngine.urgency(deadline, windowStart, now, palette),
+                    maxLines = 1
+                )
+            }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(palette.rowRule))
     }
 }
+
+@Composable
+private fun stringResourceOrFallback(): String =
+    androidx.compose.ui.res.stringResource(app.netoverdose.R.string.file_missing)

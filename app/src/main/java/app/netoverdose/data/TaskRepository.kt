@@ -75,6 +75,26 @@ class TaskRepository(
 
     fun steps(taskId: Long): Flow<List<StepEntity>> = db.steps().observe(taskId)
 
+    /** Notes for the horizon calendar day sheet. */
+    val notes: Flow<List<NoteEntity>> = db.notes().observeAll()
+
+    /** Full append-only journal, newest first, for the journal screen. */
+    val allEvents: Flow<List<EventEntity>> = db.events().observeAllDesc()
+
+    suspend fun notesBetween(from: Long, to: Long): List<NoteEntity> = withContext(Dispatchers.IO) {
+        db.notes().between(from, to)
+    }
+
+    suspend fun addNote(at: Long, text: String) = withContext(Dispatchers.IO) {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return@withContext
+        db.notes().insert(NoteEntity(at = at, text = trimmed.take(400)))
+    }
+
+    suspend fun deleteNote(id: Long) = withContext(Dispatchers.IO) {
+        db.notes().delete(id)
+    }
+
     fun observeTask(id: Long): Flow<TaskItem?> =
         combine(db.tasks().observe(id), db.attachments().observeAll()) { task, attachments ->
             task?.let { TaskItem(it, attachments.firstOrNull { a -> a.taskId == it.id }) }
@@ -179,6 +199,82 @@ class TaskRepository(
             db.events().insert(EventEntity(taskId = id, type = EventType.POSTPONED, at = now, payload = null))
         }
         reminders.cancel(id)
+    }
+
+    /** Mass postpone from the plan list's selection bar. */
+    suspend fun postponeAll(ids: List<Long>) = withContext(Dispatchers.IO) {
+        ids.forEach { postpone(it) }
+    }
+
+    /** Mass delete from the plan list's selection bar. */
+    suspend fun deleteAll(ids: List<Long>) = withContext(Dispatchers.IO) {
+        ids.forEach { delete(it) }
+    }
+
+    /** Starts a 15-minute sprint; the wave shows the countdown instead of the window. */
+    suspend fun startSprint(id: Long, minutes: Int = 15) = withContext(Dispatchers.IO) {
+        val task = db.tasks().get(id) ?: return@withContext
+        val now = System.currentTimeMillis()
+        db.withTransaction {
+            db.tasks().update(
+                task.copy(sprintStartedAt = now, sprintEndsAt = now + minutes * 60_000L)
+            )
+            db.events().insert(EventEntity(taskId = id, type = EventType.STARTED, at = now, payload = "sprint"))
+        }
+    }
+
+    suspend fun stopSprint(id: Long) = withContext(Dispatchers.IO) {
+        val task = db.tasks().get(id) ?: return@withContext
+        db.tasks().update(task.copy(sprintStartedAt = null, sprintEndsAt = null))
+    }
+
+    /** Persists a new manual order, given the ids top to bottom. */
+    suspend fun reorder(orderedIds: List<Long>) = withContext(Dispatchers.IO) {
+        db.withTransaction {
+            orderedIds.forEachIndexed { index, id ->
+                val task = db.tasks().get(id) ?: return@forEachIndexed
+                if (task.orderIndex != index) db.tasks().update(task.copy(orderIndex = index))
+            }
+        }
+    }
+
+    /** Wipes every table and every attachment file on disk. */
+    suspend fun wipeAll() = withContext(Dispatchers.IO) {
+        val attachments = db.attachments().all()
+        reminders.cancelAll()
+        db.withTransaction {
+            db.tasks().clear()
+            db.events().clear()
+            db.ideas().clear()
+            db.notes().clear()
+        }
+        attachments.forEach { attachment ->
+            runCatching { File(context.filesDir, attachment.storedPath).parentFile?.deleteRecursively() }
+        }
+    }
+
+    /** Distinct file extensions present in the data, used by the pool breakdown. */
+    suspend fun extensionGroups(): Map<String, List<ProgressTask>> = withContext(Dispatchers.IO) {
+        val attachments = db.attachments().all().associateBy { it.taskId }
+        db.tasks().all().groupBy { task ->
+            val name = attachments[task.id]?.displayName ?: return@groupBy "—"
+            val dot = name.lastIndexOf('.')
+            if (dot in 1 until name.length - 1) name.substring(dot + 1).uppercase().take(5) else "—"
+        }.mapValues { (_, list) -> list.map { it.toProgress() } }
+    }
+
+    /** How many times tasks of each extension were postponed, for the chronic-delay bar. */
+    suspend fun postponedCountsByExtension(): Map<String, Int> = withContext(Dispatchers.IO) {
+        val attachments = db.attachments().all().associateBy { it.taskId }
+        val taskExt = db.tasks().all().associate { task ->
+            val name = attachments[task.id]?.displayName ?: ""
+            val dot = name.lastIndexOf('.')
+            task.id to if (dot in 1 until name.length - 1) name.substring(dot + 1).uppercase().take(5) else "—"
+        }
+        db.events().all()
+            .filter { it.type == EventType.POSTPONED }
+            .groupingBy { taskExt[it.taskId] ?: "—" }
+            .eachCount()
     }
 
     suspend fun reopen(id: Long) = withContext(Dispatchers.IO) {
@@ -408,7 +504,14 @@ class TaskRepository(
         val dir = File(context.filesDir, relativeDir)
         if (!dir.mkdirs() && !dir.isDirectory) return
         val file = File(dir, displayName)
-        val written = runCatching { file.writeText(note, Charsets.UTF_8) }.isSuccess
+        // Pad the placeholder so the demo shows a realistic size instead of "0 КБ".
+        val padding = (64 + (displayName.length * 37) % 900) * 1024
+        val written = runCatching {
+            file.outputStream().use { out ->
+                out.write(note.toByteArray(Charsets.UTF_8))
+                out.write(ByteArray(padding))
+            }
+        }.isSuccess
         if (!written || !file.exists()) return
         db.attachments().insert(
             AttachmentEntity(

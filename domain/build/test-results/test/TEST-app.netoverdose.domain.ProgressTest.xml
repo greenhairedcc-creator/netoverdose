@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="app.netoverdose.domain.ProgressTest" tests="17" skipped="0" failures="0" errors="0" timestamp="2026-11-21T19:19:25.341Z" hostname="WINDOSE20" time="0.026">
+<testsuite name="app.netoverdose.domain.ProgressTest" tests="17" skipped="0" failures="0" errors="0" timestamp="2026-11-22T15:43:21.219Z" hostname="WINDOSE20" time="0.014">
   <properties/>
-  <testcase name="threeClosedIsEnough" classname="app.netoverdose.domain.ProgressTest" time="0.017"/>
-  <testcase name="allOverdueMeansBehind" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
-  <testcase name="medianFallsBackWhenNothingStarted" classname="app.netoverdose.domain.ProgressTest" time="0.001"/>
-  <testcase name="metricsSharesAreComputed" classname="app.netoverdose.domain.ProgressTest" time="0.002"/>
+  <testcase name="threeClosedIsEnough" classname="app.netoverdose.domain.ProgressTest" time="0.004"/>
+  <testcase name="allOverdueMeansBehind" classname="app.netoverdose.domain.ProgressTest" time="0.001"/>
+  <testcase name="medianFallsBackWhenNothingStarted" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
+  <testcase name="metricsSharesAreComputed" classname="app.netoverdose.domain.ProgressTest" time="0.001"/>
   <testcase name="openAndPostponedAreNotCounted" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
-  <testcase name="difficultyIsClampedIntoWeight" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
-  <testcase name="oldClosedTasksFallOutOfWorkingWindow" classname="app.netoverdose.domain.ProgressTest" time="0.001"/>
+  <testcase name="difficultyIsClampedIntoWeight" classname="app.netoverdose.domain.ProgressTest" time="0.001"/>
+  <testcase name="oldClosedTasksFallOutOfWorkingWindow" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
   <testcase name="openOverdueReserveIsNegative" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
   <testcase name="reserveIsWeightedByDifficulty" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
-  <testcase name="emptyHistoryHasNoData" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
+  <testcase name="emptyHistoryHasNoData" classname="app.netoverdose.domain.ProgressTest" time="0.001"/>
   <testcase name="weightedMedianUsesWeights" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
   <testcase name="emptyDayHasNullAverage" classname="app.netoverdose.domain.ProgressTest" time="0.003"/>
-  <testcase name="oneHeavyTaskDominatesLightOnes" classname="app.netoverdose.domain.ProgressTest" time="0.001"/>
+  <testcase name="oneHeavyTaskDominatesLightOnes" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
   <testcase name="thresholdsAreInclusive" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
   <testcase name="twoClosedIsStillNotEnough" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
-  <testcase name="dailyReservesHasFourteenBucketsOldestFirst" classname="app.netoverdose.domain.ProgressTest" time="0.001"/>
+  <testcase name="dailyReservesHasFourteenBucketsOldestFirst" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
   <testcase name="metricsOnEmptyHistoryAreNull" classname="app.netoverdose.domain.ProgressTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

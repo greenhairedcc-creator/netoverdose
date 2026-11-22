@@ -102,15 +102,33 @@ fun ReserveBars(
                 }
                 val fraction = if (average == null) 0.08f
                 else (abs(average) / 3.0).coerceIn(0.12, 1.0).toFloat()
+                val overdue = average != null && average < 0
                 val color = when {
                     average == null -> palette.off
-                    average < 0 -> palette.danger
+                    overdue -> palette.danger
                     else -> palette.waveColors[(index * 31 / 13).coerceIn(0, palette.waveColors.size - 1)]
                 }
                 Box(
                     Modifier.weight(1f).fillMaxHeight(fraction).background(color)
                         .semantics { contentDescription = description }
-                )
+                ) {
+                    // Overdue days keep the reference's diagonal hatch instead of a flat block.
+                    if (overdue && palette.hatch) {
+                        Canvas(Modifier.matchParentSize()) {
+                            val step = 4.dp.toPx()
+                            var offset = -size.height
+                            while (offset < size.width) {
+                                drawLine(
+                                    color = palette.bg.copy(alpha = 0.85f),
+                                    start = Offset(offset, size.height),
+                                    end = Offset(offset + size.height, 0f),
+                                    strokeWidth = 2.dp.toPx()
+                                )
+                                offset += step
+                            }
+                        }
+                    }
+                }
             }
         }
         if (showAxis) {

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.netoverdose.domain.SeasonTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-11-22T15:43:21.235Z" hostname="WINDOSE20" time="0.007">
+  <properties/>
+  <testcase name="emptySeasonHasNoReserveOrMedian" classname="app.netoverdose.domain.SeasonTest" time="0.003"/>
+  <testcase name="seasonIndexCountsFullWindowsFromAnchor" classname="app.netoverdose.domain.SeasonTest" time="0.001"/>
+  <testcase name="gridHasTwentyEightDays" classname="app.netoverdose.domain.SeasonTest" time="0.0"/>
+  <testcase name="futureDeadlineIsNotBurned" classname="app.netoverdose.domain.SeasonTest" time="0.0"/>
+  <testcase name="deltaComparesAgainstPrevious" classname="app.netoverdose.domain.SeasonTest" time="0.001"/>
+  <testcase name="boundsAreTwentyEightDaysApart" classname="app.netoverdose.domain.SeasonTest" time="0.0"/>
+  <testcase name="deltaIsNullWhenPreviousHasNoData" classname="app.netoverdose.domain.SeasonTest" time="0.0"/>
+  <testcase name="maxWeightNeverZero" classname="app.netoverdose.domain.SeasonTest" time="0.0"/>
+  <testcase name="pulledFromFireCountsLateStartClosedOnTime" classname="app.netoverdose.domain.SeasonTest" time="0.0"/>
+  <testcase name="nowBeforeAnchorIsFirstSeason" classname="app.netoverdose.domain.SeasonTest" time="0.0"/>
+  <testcase name="gridCoversEveryDayOfTheSeason" classname="app.netoverdose.domain.SeasonTest" time="0.0"/>
+  <testcase name="burnedDeadlineIsCounted" classname="app.netoverdose.domain.SeasonTest" time="0.0"/>
+  <testcase name="statsCountOnlyTasksInsideTheSeason" classname="app.netoverdose.domain.SeasonTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

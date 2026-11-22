@@ -5,9 +5,11 @@ import androidx.room.Room
 import app.netoverdose.data.AppDatabase
 import app.netoverdose.data.MIGRATION_1_2
 import app.netoverdose.data.MIGRATION_2_3
+import app.netoverdose.data.MIGRATION_3_4
 import app.netoverdose.data.TaskRepository
 import app.netoverdose.design.DesignController
 import app.netoverdose.notify.Reminders
+import app.netoverdose.sound.Sounds
 import app.netoverdose.ui.theme.installFonts
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +31,10 @@ class NetoverdoseApp : Application() {
     lateinit var designController: DesignController
         private set
 
+    /** Synthesised UI tones; shared so any screen can play without holding a Context. */
+    lateinit var sounds: Sounds
+        private set
+
     /** One-shot user messages produced outside of screens (share intake, workers). */
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
 
@@ -38,12 +44,13 @@ class NetoverdoseApp : Application() {
         super.onCreate()
         installFonts(this)
         database = Room.databaseBuilder(this, AppDatabase::class.java, "netoverdose.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
         reminders = Reminders(this)
         reminders.createChannel()
         repository = TaskRepository(this, database, reminders)
         designController = DesignController(this)
+        sounds = Sounds(this)
 
         // Safety net: re-plan reminders from Room in case the OEM dropped persisted work.
         appScope.launch {

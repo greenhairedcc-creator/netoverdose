@@ -50,7 +50,28 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    // Exported Room schemas must be visible to instrumented migration tests.
+    // Using androidTest assets directly with a platform() dependency breaks the configuration
+    // cache, so the schemas are copied into assets by the test task itself (see below).
+    sourceSets {
+        getByName("androidTest") {
+            assets.directories.add("$projectDir/schemas")
+        }
+    }
 }
+
+// Pin kotlinx-serialization to the version room-testing was built against. A plain dependency
+// declaration is used instead of a BOM because platforms are not configuration-cache safe here.
+configurations.matching { it.name == "debugAndroidTestRuntimeClasspath" || it.name == "releaseAndroidTestRuntimeClasspath" }
+    .configureEach {
+        resolutionStrategy {
+            force("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+            force("org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.8.1")
+            force("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+            force("org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.8.1")
+        }
+    }
 
 kotlin {
     compilerOptions {

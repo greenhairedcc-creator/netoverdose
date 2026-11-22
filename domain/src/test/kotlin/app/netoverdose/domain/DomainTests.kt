@@ -174,4 +174,12 @@ class DeadlineOptionsTest {
         val end = ZonedDateTime.of(2026, 11, 25, 23, 59, 0, 0, zone).toInstant().toEpochMilli()
         assertEquals(end, DeadlineOptions.fromUtcDate(utcMidnight, zone))
     }
+
+    @Test
+    fun pickerRoundTripReturnsSameDay() {
+        val date = java.time.LocalDate.of(2026, 11, 25)
+        val utc = DeadlineOptions.toUtcDate(date)
+        val localEnd = DeadlineOptions.fromUtcDate(utc, zone)
+        assertEquals("25.11", TimeText.dateShort(localEnd, zone))
+    }
 }

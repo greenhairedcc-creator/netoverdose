@@ -58,6 +58,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.netoverdose.NetoverdoseApp
 import app.netoverdose.R
+import app.netoverdose.data.EventEntity
 import app.netoverdose.design.LocalDesign
 import app.netoverdose.ui.components.AccentButton
 import app.netoverdose.ui.components.AppBackground
@@ -103,6 +104,7 @@ class MoreViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (enabled) {
                 app.reminders.reschedule(repo.openTasksOnce())
+                app.sounds.tick()
                 app.messages.emit(app.getString(R.string.msg_notifications_on))
             } else {
                 app.reminders.cancelAll()
@@ -142,15 +144,28 @@ class MoreViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun resetDemo() {
+    /** Persists the sound preference and plays a sample when enabling. */
+    fun setSound(enabled: Boolean) {
+        app.sounds.enabled = enabled
+        if (enabled) app.sounds.confirm()
+    }
+
+    fun soundEnabled(): Boolean = app.sounds.enabled
+
+    /** Wipes tasks, attachments, events, ideas and notes without reseeding. */
+    fun wipeAll() {
         if (busy.value) return
         viewModelScope.launch {
             busy.value = true
-            runCatching { repo.resetDemoData() }
+            runCatching { repo.wipeAll() }
             busy.value = false
-            app.messages.emit(app.getString(R.string.msg_demo_done))
+            app.messages.emit(app.getString(R.string.msg_wiped))
         }
     }
+
+    /** Event log for the journal screen, newest first. */
+    val journal: StateFlow<List<EventEntity>> = app.repository.allEvents
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -158,14 +173,18 @@ class MoreViewModel(application: Application) : AndroidViewModel(application) {
 fun MoreScreen(
     onOpenLab: () -> Unit,
     onOpenIdeas: () -> Unit,
+    onOpenJournal: () -> Unit,
     viewModel: MoreViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val journal by viewModel.journal.collectAsStateWithLifecycle()
+    val journalCount = journal.size
     val palette = LocalDesign.current
     val context = androidx.compose.ui.platform.LocalContext.current
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var showBattery by rememberSaveable { mutableStateOf(false) }
-    var showDemoConfirm by rememberSaveable { mutableStateOf(false) }
+    var showWipeConfirm by rememberSaveable { mutableStateOf(false) }
+    var soundOn by rememberSaveable { mutableStateOf(viewModel.soundEnabled()) }
     var pendingImport by remember { mutableStateOf<Uri?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -266,17 +285,51 @@ fun MoreScreen(
             )
 
             MoreRow(
-                "demo",
-                stringResource(R.string.more_demo),
-                stringResource(R.string.more_demo_cap),
-                onClick = { showDemoConfirm = true }
-            )
-
-            MoreRow(
                 "battery",
                 stringResource(R.string.more_battery),
                 stringResource(R.string.more_battery_cap),
                 onClick = { showBattery = true }
+            )
+
+            val soundCd = stringResource(R.string.a11y_switch_cd, stringResource(R.string.more_sound))
+            MoreRow(
+                "sound",
+                stringResource(R.string.more_sound),
+                stringResource(
+                    if (soundOn) R.string.more_sound_on else R.string.more_sound_off
+                ),
+                onClick = {
+                    viewModel.setSound(!soundOn)
+                    soundOn = !soundOn
+                },
+                trailing = {
+                    Box(
+                        Modifier.height(44.dp).semantics { contentDescription = soundCd },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        SharpSwitch(
+                            checked = soundOn,
+                            onChange = { value ->
+                                viewModel.setSound(value)
+                                soundOn = value
+                            }
+                        )
+                    }
+                }
+            )
+
+            MoreRow(
+                "journal",
+                stringResource(R.string.more_journal),
+                stringResource(R.string.journal_count, journalCount),
+                onClick = onOpenJournal
+            )
+
+            MoreRow(
+                "wipe",
+                stringResource(R.string.more_wipe),
+                stringResource(R.string.more_wipe_cap),
+                onClick = { showWipeConfirm = true }
             )
 
             MoreRow(
@@ -290,12 +343,12 @@ fun MoreScreen(
         }
     }
 
-    if (showDemoConfirm) {
+    if (showWipeConfirm) {
         ConfirmDialog(
-            title = stringResource(R.string.demo_title),
-            text = stringResource(R.string.demo_text),
-            onConfirm = { showDemoConfirm = false; viewModel.resetDemo() },
-            onDismiss = { showDemoConfirm = false }
+            title = stringResource(R.string.wipe_title),
+            text = stringResource(R.string.wipe_text),
+            onConfirm = { showWipeConfirm = false; viewModel.wipeAll() },
+            onDismiss = { showWipeConfirm = false }
         )
     }
 
