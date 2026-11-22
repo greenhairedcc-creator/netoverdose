@@ -138,12 +138,41 @@ class IntakeViewModel(application: Application) : AndroidViewModel(application) 
         refreshEstimate()
     }
 
+    /**
+     * Starts a new form. The view model outlives the sheet, so without this the previous
+     * session's title, deadline and file would leak into the next "+ Задача".
+     *
+     * [stored] is a copy the caller no longer owns; with null the form simply stays empty.
+     * The copy currently held as a draft never became a task, so it is deleted here.
+     */
+    fun startCleanForm(stored: StoredAttachment? = null) {
+        val previous = attachment
+        reset()
+        if (stored != null) prefill(stored)
+        if (previous != null && previous !== stored) discard(previous)
+    }
+
+    /**
+     * Drops the unsaved copy when the sheet is closed. Once [save] ran, ownership has moved
+     * to the task and [attachment] is already null, so saving never deletes anything.
+     */
+    fun discardDraft() {
+        val previous = attachment
+        clearDraft()
+        if (previous != null) discard(previous)
+    }
+
     fun attach(uri: Uri) {
         viewModelScope.launch {
             runCatching { app.repository.attach(uri) }
-                .onSuccess {
-                    attachment = it
+                .onSuccess { stored ->
+                    val previous = attachment
+                    clearDraft()
+                    attachment = stored
                     refreshEstimate()
+                    // Picking a second file replaces the first one; it never became a task,
+                    // so the earlier copy must not stay on disk.
+                    if (previous != null) discard(previous)
                 }
                 .onFailure { app.messages.emit(app.getString(R.string.msg_attach_failed)) }
         }
@@ -163,10 +192,23 @@ class IntakeViewModel(application: Application) : AndroidViewModel(application) 
                 remind = remind,
                 stored = attachment
             )
+            // The task owns the file now. Clearing the draft first means the next form
+            // cannot reuse the same storedPath, which would make deleting one task wipe
+            // the attachment of the other.
+            clearDraft()
             app.sounds.confirm()
             app.messages.emit(app.getString(R.string.msg_saved))
             onSaved()
         }
+    }
+
+    private fun clearDraft() {
+        attachment = null
+        refreshEstimate()
+    }
+
+    private fun discard(stored: StoredAttachment) {
+        viewModelScope.launch { app.repository.discardAttachment(stored) }
     }
 
     private fun resolveDeadline(now: Long): Long = when (deadlinePick) {

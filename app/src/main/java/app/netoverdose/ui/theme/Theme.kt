@@ -17,6 +17,7 @@ import app.netoverdose.design.DesignController
 import app.netoverdose.design.DesignEngine
 import app.netoverdose.design.DesignPalette
 import app.netoverdose.design.LocalDesign
+import app.netoverdose.ui.components.SpectrumShiftProvider
 
 private val SquareShapes = Shapes(
     extraSmall = RoundedCornerShape(0.dp),
@@ -38,7 +39,10 @@ fun NetoverdoseTheme(controller: DesignController, content: @Composable () -> Un
         netoverdoseTypography()
     }
 
+    // One spectrum clock for the whole app: every rainbow surface reads the same phase,
+    // and there is a single animation loop instead of one per element.
     CompositionLocalProvider(LocalDesign provides palette) {
+        SpectrumShiftProvider(durationMs = palette.gradientDurationMs) {
         val scheme = if (palette.dark) {
             darkColorScheme(
                 primary = palette.accent, onPrimary = palette.onAccent,
@@ -60,8 +64,9 @@ fun NetoverdoseTheme(controller: DesignController, content: @Composable () -> Un
                 scrim = Color.Black
             )
         }
-        MaterialTheme(colorScheme = scheme, typography = typography, shapes = SquareShapes) {
-            content()
+            MaterialTheme(colorScheme = scheme, typography = typography, shapes = SquareShapes) {
+                content()
+            }
         }
     }
 }

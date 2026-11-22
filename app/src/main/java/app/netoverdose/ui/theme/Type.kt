@@ -61,36 +61,100 @@ private fun monoFamily(context: Context): FontFamily? = family(
     Triple(fontId(context, "roboto_mono_bold"), FontWeight.Bold, FontStyle.Normal)
 )
 
-/** One selectable typeface set. `key` is persisted in the design tokens. */
+// Inter ships only as a variable font, so the single file is registered once per weight.
+private fun interFamily(context: Context): FontFamily? = family(
+    Triple(fontId(context, "inter_variable"), FontWeight.Normal, FontStyle.Normal),
+    Triple(fontId(context, "inter_variable"), FontWeight.Medium, FontStyle.Normal),
+    Triple(fontId(context, "inter_variable"), FontWeight.Bold, FontStyle.Normal)
+)
+
+/** Alt sans: Roboto condensed-free stack is not bundled, so Roboto itself stands in. */
+private fun altSansFamily(context: Context): FontFamily? = sansFamily(context)
+
+/**
+ * One selectable typeface set. `key` is persisted in the design tokens; a set overrides
+ * only the faces it replaces, the rest fall back to the bundle.
+ */
 data class FamilyOption(
     val key: String,
+    val labelRes: Int,
     val serif: FontFamily?,
     val sans: FontFamily?,
     val mono: FontFamily?
 )
 
-const val DEFAULT_FAMILY_KEY = "bundle"
+const val BUNDLE_FAMILY_KEY = "bundle"
+const val INTER_FAMILY_KEY = "inter"
+const val NOTO_FAMILY_KEY = "noto"
+const val ROBOTO_FAMILY_KEY = "roboto"
+
+/** Platform families; always offered so the user can fall back if the bundle is not liked. */
+const val SYSTEM_FAMILY_KEY = "system"
+
+/** Kept for callers written before the system option existed. */
+const val DEFAULT_FAMILY_KEY = BUNDLE_FAMILY_KEY
 
 /**
- * Families actually shipped in res/font. When the TTFs are missing the list is empty and
- * the Lab hides the picker instead of offering variants that would look identical.
+ * Every set the user can pick, ordered from most neutral to most decorative. A set is
+ * listed only when its files were actually found, otherwise two rows would look identical.
  */
 fun availableFamilies(context: Context): List<FamilyOption> {
     val bundle = FamilyOption(
-        key = DEFAULT_FAMILY_KEY,
+        key = BUNDLE_FAMILY_KEY,
+        labelRes = app.netoverdose.R.string.font_bundle,
         serif = serifFamily(context),
         sans = sansFamily(context),
         mono = monoFamily(context)
     )
-    return listOfNotNull(bundle.takeIf { it.serif != null || it.sans != null || it.mono != null })
+    val inter = FamilyOption(
+        key = INTER_FAMILY_KEY,
+        labelRes = app.netoverdose.R.string.font_inter,
+        serif = interFamily(context),
+        sans = interFamily(context),
+        mono = null
+    )
+    val noto = FamilyOption(
+        key = NOTO_FAMILY_KEY,
+        labelRes = app.netoverdose.R.string.font_noto,
+        serif = serifFamily(context),
+        sans = null,
+        mono = null
+    )
+    val roboto = FamilyOption(
+        key = ROBOTO_FAMILY_KEY,
+        labelRes = app.netoverdose.R.string.font_roboto,
+        serif = null,
+        sans = altSansFamily(context),
+        mono = null
+    )
+    val system = FamilyOption(
+        key = SYSTEM_FAMILY_KEY,
+        labelRes = app.netoverdose.R.string.font_system,
+        serif = FontFamily.Serif,
+        sans = FontFamily.SansSerif,
+        mono = FontFamily.Monospace
+    )
+    return listOfNotNull(
+        bundle.takeIf { it.serif != null || it.sans != null || it.mono != null },
+        inter.takeIf { it.serif != null },
+        noto.takeIf { it.serif != null },
+        roboto.takeIf { it.sans != null },
+        system
+    )
 }
 
-/** Applies the persisted choice, falling back to the platform families. */
+/**
+ * Applies the persisted choice. A set that overrides only one face keeps the bundle for
+ * the others, so switching to Inter does not leave the mono labels on a system font.
+ */
 fun applyFamily(context: Context, key: String) {
-    val option = availableFamilies(context).firstOrNull { it.key == key }
-    SerifFamily = option?.serif ?: FontFamily.Serif
-    SansFamily = option?.sans ?: FontFamily.Default
-    MonoFamily = option?.mono ?: FontFamily.Monospace
+    val all = availableFamilies(context)
+    val bundle = all.firstOrNull { it.key == BUNDLE_FAMILY_KEY }
+        ?: all.firstOrNull()
+    val option = all.firstOrNull { it.key == key } ?: bundle
+    SerifFamily = option?.serif ?: bundle?.serif ?: FontFamily.Serif
+    SansFamily = option?.sans ?: bundle?.sans ?: FontFamily.SansSerif
+    MonoFamily = option?.mono ?: bundle?.mono ?: FontFamily.Monospace
 }
 
 fun netoverdoseTypography(): Typography = Typography(

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="app.netoverdose.domain.DelayCostTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-11-22T15:43:21.208Z" hostname="WINDOSE20" time="0.008">
+<testsuite name="app.netoverdose.domain.DelayCostTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-11-22T21:32:12.469Z" hostname="WINDOSE20" time="0.015">
   <properties/>
-  <testcase name="poolReserveIsNullWithoutClosedTasks" classname="app.netoverdose.domain.DelayCostTest" time="0.003"/>
+  <testcase name="poolReserveIsNullWithoutClosedTasks" classname="app.netoverdose.domain.DelayCostTest" time="0.007"/>
   <testcase name="currentLoadExceedsBaseAsDeadlineApproaches" classname="app.netoverdose.domain.DelayCostTest" time="0.001"/>
   <testcase name="chanceIsClamped" classname="app.netoverdose.domain.DelayCostTest" time="0.0"/>
   <testcase name="pulledFromFireIgnoresCalmStarts" classname="app.netoverdose.domain.DelayCostTest" time="0.001"/>

@@ -44,6 +44,8 @@ import kotlin.random.Random
 @Composable
 fun StarfallSplash(onFinished: () -> Unit, durationMs: Long = 2600L) {
     val palette = LocalDesign.current
+    // Animated spectrum, same loop as the rest of the UI; kept out of the draw calls.
+    val splashBrush = animatedSpectrumBrush()
     val glyphs = remember { "·*+✳✶✷·+*··".toList() }
     val trails = remember {
         val random = Random(7)
@@ -127,7 +129,7 @@ fun StarfallSplash(onFinished: () -> Unit, durationMs: Long = 2600L) {
             Text(
                 "overdose",
                 style = TextStyle(
-                    brush = palette.rainbowBrush,
+                    brush = splashBrush,
                     fontFamily = MonoFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 26.sp,
@@ -143,7 +145,7 @@ fun StarfallSplash(onFinished: () -> Unit, durationMs: Long = 2600L) {
             ) {
                 Box(
                     Modifier.fillMaxHeight().fillMaxWidth(progress)
-                        .background(palette.rainbowBrush, alpha = brandAlpha.coerceAtLeast(0.35f))
+                        .background(splashBrush, alpha = brandAlpha.coerceAtLeast(0.35f))
                 )
             }
         }

@@ -1,14 +1,16 @@
 package app.netoverdose
 
-import android.app.Activity
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -30,7 +32,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as NetoverdoseApp
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Both system bars are painted by the same edge-to-edge call so the status bar can
+        // never flash a colour of its own while a tab is being drawn. Dark scrims are off:
+        // the app draws its own gradient behind the bars (see AppRoot).
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
+        )
         // Only the first creation may consume ACTION_SEND. After a recreation (theme, font
         // scale, locale, process death) the system can hand the original intent back, and
         // re-importing it would silently duplicate the task.
@@ -39,12 +47,16 @@ class MainActivity : ComponentActivity() {
         setContent {
             NetoverdoseTheme(app.designController) {
                 val palette = LocalDesign.current
-                val view = LocalView.current
-                SideEffect {
-                    val window = (view.context as? Activity)?.window ?: return@SideEffect
-                    val controller = WindowCompat.getInsetsController(window, view)
-                    controller.isAppearanceLightStatusBars = !palette.dark
-                    controller.isAppearanceLightNavigationBars = !palette.dark
+                // The status/nav bar icons follow the design tokens, not the ROM theme.
+                LaunchedEffect(palette.dark) {
+                    enableEdgeToEdge(
+                        statusBarStyle = if (palette.dark)
+                            SystemBarStyle.dark(Color.TRANSPARENT)
+                        else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+                        navigationBarStyle = if (palette.dark)
+                            SystemBarStyle.dark(Color.TRANSPARENT)
+                        else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                    )
                 }
                 // Cold boot shows the ASCII starfall once; a configuration change keeps the app.
                 var splashDone by rememberSaveable { mutableStateOf(false) }
@@ -81,7 +93,9 @@ class MainActivity : ComponentActivity() {
             val prepared = runCatching { app.repository.prepareShare(first) }
             prepared.fold(
                 onSuccess = { stored ->
-                    app.pendingShare.emit(stored)
+                    // Non-suspending and never lost: the value waits for MainScreen even when
+                    // no collector exists yet, i.e. while the splash is still on screen.
+                    app.postShare(stored)
                     val extra = uris.drop(1)
                     if (extra.isNotEmpty()) emitImportMessage(app, app.repository.importShared(extra))
                 },
@@ -102,9 +116,14 @@ class MainActivity : ComponentActivity() {
         app.messages.emit(text)
     }
 
+    /**
+     * Pulls the shared URIs out of an intent (archive version, unchanged).
+     */
     private fun sharedUris(intent: Intent): List<Uri> = when (intent.action) {
         Intent.ACTION_SEND ->
-            listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
+            listOfNotNull(
+                IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+            )
         Intent.ACTION_SEND_MULTIPLE ->
             IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
                 ?.filterNotNull() ?: emptyList()

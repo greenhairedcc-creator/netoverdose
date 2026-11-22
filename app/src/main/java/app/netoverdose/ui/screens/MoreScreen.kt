@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -172,6 +173,7 @@ fun MoreScreen(
     onOpenLab: () -> Unit,
     onOpenIdeas: () -> Unit,
     onOpenJournal: () -> Unit,
+    onOpenFonts: () -> Unit,
     viewModel: MoreViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -201,8 +203,11 @@ fun MoreScreen(
     val exportNamePattern = stringResource(R.string.export_file_name_pattern)
 
     AppBackground {
+        // fillMaxSize is required: without it the scrollable column is measured against an
+        // unbounded height, the content is laid out past the viewport, and after scrolling
+        // the whole column (hit area included) drifts under the status bar.
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                 .padding(horizontal = palette.pad, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
@@ -219,33 +224,14 @@ fun MoreScreen(
             RainbowHairline(Modifier.fillMaxWidth(0.18f), alpha = palette.rainAlpha)
             Box(Modifier.height(6.dp))
 
+            // Order is by how often it is used: appearance first, then data, then behaviour.
             MoreRow("lab", stringResource(R.string.more_lab), stringResource(R.string.more_lab_cap), onOpenLab)
 
             MoreRow(
-                "export",
-                stringResource(R.string.more_export),
-                if (state.busy) stringResource(R.string.more_export_busy)
-                else stringResource(R.string.more_export_cap),
-                onClick = {
-                    exportLauncher.launch(
-                        String.format(exportNamePattern, LocalDate.now().toString())
-                    )
-                }
-            )
-
-            MoreRow(
-                "import",
-                stringResource(R.string.more_import),
-                if (state.busy) stringResource(R.string.more_import_busy)
-                else stringResource(R.string.more_import_cap),
-                onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }
-            )
-
-            MoreRow(
-                "ideas",
-                stringResource(R.string.more_ideas),
-                stringResource(R.string.more_ideas_cap, state.ideaCount),
-                onOpenIdeas
+                "fonts",
+                stringResource(R.string.more_fonts),
+                stringResource(R.string.more_fonts_cap),
+                onOpenFonts
             )
 
             val switchCd = stringResource(R.string.a11y_switch_cd, stringResource(R.string.more_notifications))
@@ -268,13 +254,6 @@ fun MoreScreen(
                         )
                     }
                 }
-            )
-
-            MoreRow(
-                "battery",
-                stringResource(R.string.more_battery),
-                stringResource(R.string.more_battery_cap),
-                onClick = { showBattery = true }
             )
 
             val soundCd = stringResource(R.string.a11y_switch_cd, stringResource(R.string.more_sound))
@@ -305,6 +284,20 @@ fun MoreScreen(
             )
 
             MoreRow(
+                "battery",
+                stringResource(R.string.more_battery),
+                stringResource(R.string.more_battery_cap),
+                onClick = { showBattery = true }
+            )
+
+            MoreRow(
+                "ideas",
+                stringResource(R.string.more_ideas),
+                stringResource(R.string.more_ideas_cap, state.ideaCount),
+                onOpenIdeas
+            )
+
+            MoreRow(
                 "journal",
                 stringResource(R.string.more_journal),
                 stringResource(R.string.journal_count, journalCount),
@@ -312,10 +305,23 @@ fun MoreScreen(
             )
 
             MoreRow(
-                "wipe",
-                stringResource(R.string.more_wipe),
-                stringResource(R.string.more_wipe_cap),
-                onClick = { showWipeConfirm = true }
+                "export",
+                stringResource(R.string.more_export),
+                if (state.busy) stringResource(R.string.more_export_busy)
+                else stringResource(R.string.more_export_cap),
+                onClick = {
+                    exportLauncher.launch(
+                        String.format(exportNamePattern, LocalDate.now().toString())
+                    )
+                }
+            )
+
+            MoreRow(
+                "import",
+                stringResource(R.string.more_import),
+                if (state.busy) stringResource(R.string.more_import_busy)
+                else stringResource(R.string.more_import_cap),
+                onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }
             )
 
             MoreRow(
@@ -323,6 +329,13 @@ fun MoreScreen(
                 stringResource(R.string.more_about),
                 stringResource(R.string.more_about_cap),
                 onClick = { showAbout = true }
+            )
+
+            MoreRow(
+                "wipe",
+                stringResource(R.string.more_wipe),
+                stringResource(R.string.more_wipe_cap),
+                onClick = { showWipeConfirm = true }
             )
 
             Box(Modifier.height(24.dp))
@@ -565,13 +578,67 @@ private fun MoreGlyph(kind: String) {
                     drawRect(color, topLeft = Offset(w * 0.82f, h * 0.42f), size = Size(w * 0.1f, h * 0.16f))
                     drawRect(color, topLeft = Offset(w * 0.18f, h * 0.36f), size = Size(w * 0.24f, h * 0.28f))
                 }
-                else -> {
+                // "Aa" — the typeface picker.
+                "fonts" -> {
+                    drawLine(color, Offset(w * 0.10f, h * 0.90f), Offset(w * 0.34f, h * 0.14f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.34f, h * 0.14f), Offset(w * 0.58f, h * 0.90f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.20f, h * 0.62f), Offset(w * 0.49f, h * 0.62f), strokeWidth = stroke)
+                    drawCircle(
+                        color, radius = w * 0.16f, center = Offset(w * 0.74f, h * 0.62f),
+                        style = Stroke(width = stroke)
+                    )
+                    drawLine(color, Offset(w * 0.90f, h * 0.48f), Offset(w * 0.90f, h * 0.90f), strokeWidth = stroke)
+                }
+                // Speaker with two waves.
+                "sound" -> {
+                    drawLine(color, Offset(w * 0.10f, h * 0.38f), Offset(w * 0.26f, h * 0.38f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.10f, h * 0.62f), Offset(w * 0.26f, h * 0.62f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.10f, h * 0.38f), Offset(w * 0.10f, h * 0.62f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.26f, h * 0.38f), Offset(w * 0.46f, h * 0.18f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.26f, h * 0.62f), Offset(w * 0.46f, h * 0.82f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.46f, h * 0.18f), Offset(w * 0.46f, h * 0.82f), strokeWidth = stroke)
+                    drawArc(
+                        color, startAngle = -55f, sweepAngle = 110f, useCenter = false,
+                        topLeft = Offset(w * 0.48f, h * 0.30f), size = Size(w * 0.22f, h * 0.40f),
+                        style = Stroke(width = stroke)
+                    )
+                    drawArc(
+                        color, startAngle = -55f, sweepAngle = 110f, useCenter = false,
+                        topLeft = Offset(w * 0.52f, h * 0.16f), size = Size(w * 0.38f, h * 0.68f),
+                        style = Stroke(width = stroke)
+                    )
+                }
+                // Bracket with three logged lines.
+                "journal" -> {
+                    drawLine(color, Offset(w * 0.12f, h * 0.12f), Offset(w * 0.12f, h * 0.88f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.88f, h * 0.12f), Offset(w * 0.88f, h * 0.88f), strokeWidth = stroke)
+                    listOf(0.28f, 0.50f, 0.72f).forEachIndexed { index, y ->
+                        drawLine(color, Offset(w * 0.26f, h * y), Offset(w * (0.74f - index * 0.12f), h * y), strokeWidth = stroke)
+                    }
+                }
+                // Bin: lid, body, two slats.
+                "wipe" -> {
+                    drawLine(color, Offset(w * 0.12f, h * 0.24f), Offset(w * 0.88f, h * 0.24f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.38f, h * 0.24f), Offset(w * 0.38f, h * 0.12f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.62f, h * 0.24f), Offset(w * 0.62f, h * 0.12f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.38f, h * 0.12f), Offset(w * 0.62f, h * 0.12f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.22f, h * 0.24f), Offset(w * 0.30f, h * 0.90f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.78f, h * 0.24f), Offset(w * 0.70f, h * 0.90f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.30f, h * 0.90f), Offset(w * 0.70f, h * 0.90f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.44f, h * 0.42f), Offset(w * 0.46f, h * 0.76f), strokeWidth = stroke)
+                    drawLine(color, Offset(w * 0.58f, h * 0.42f), Offset(w * 0.56f, h * 0.76f), strokeWidth = stroke)
+                }
+                // Info: ring with a stem and a dot.
+                "about" -> {
                     drawCircle(
                         color, radius = w * 0.42f, center = Offset(w / 2f, h / 2f),
                         style = Stroke(width = stroke)
                     )
                     drawCircle(color, radius = 1.3.dp.toPx(), center = Offset(w / 2f, h * 0.29f))
-                    drawLine(color, Offset(w / 2f, h * 0.45f), Offset(w / 2f, h * 0.73f), strokeWidth = stroke)
+                    drawLine(color, Offset(w / 2f, h * 0.44f), Offset(w / 2f, h * 0.72f), strokeWidth = stroke)
+                }
+                else -> {
+                    drawLine(color, Offset(0f, h * 0.5f), Offset(w, h * 0.5f), strokeWidth = stroke)
                 }
             }
         }

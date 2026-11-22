@@ -16,6 +16,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.launch
 
 class NetoverdoseApp : Application() {
@@ -42,8 +46,29 @@ class NetoverdoseApp : Application() {
     /**
      * A shared file waiting for the intake panel (A2). It is a copy in private storage;
      * nothing is persisted as a task until the user saves the form.
+     *
+     * A StateFlow, not a Channel: the file is written before the splash releases AppRoot
+     * (StarfallSplash holds 2600 ms), so the value must survive with no collector, and the
+     * event has to remain readable after the activity is recreated. More than one observer
+     * looks at it — AppRoot only switches to Main, MainScreen takes and clears it — so a
+     * single-consumer queue would be handed to whichever observer collected first, and
+     * cancelling any collector of a Channel closes it for the whole Application.
+     * Consumption happens in exactly one place: [takeShare].
      */
-    val pendingShare = MutableSharedFlow<StoredAttachment>(extraBufferCapacity = 1)
+    private val shareHolder = MutableStateFlow<StoredAttachment?>(null)
+
+    val pendingShare: StateFlow<StoredAttachment?> = shareHolder.asStateFlow()
+
+    /** Publishes a prepared copy for the intake panel. Called from the share entry point. */
+    fun postShare(stored: StoredAttachment) {
+        shareHolder.value = stored
+    }
+
+    /**
+     * Returns the pending copy and clears it, so only one caller ever opens the form for it.
+     * MainScreen is the only intended caller; AppRoot just watches the value.
+     */
+    fun takeShare(): StoredAttachment? = shareHolder.getAndUpdate { null }
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

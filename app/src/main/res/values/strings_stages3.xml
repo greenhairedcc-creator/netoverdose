@@ -69,6 +69,22 @@
     <string name="card_edit_label">Правка задачи</string>
     <string name="group_fonts">Шрифты</string>
     <string name="group_fonts_hint">Семейство применяется ко всему приложению и сохраняется в оформлении.</string>
+    <string name="fonts_title">Шрифты</string>
+    <string name="fonts_note">Семейство применяется ко всему приложению сразу и сохраняется в оформлении.</string>
+    <string name="font_bundle">Noto Serif · Roboto</string>
+    <string name="font_inter">Inter</string>
+    <string name="font_noto">Noto Serif</string>
+    <string name="font_roboto">Roboto</string>
+    <string name="font_system">Системный</string>
+    <string name="font_system_cap">Запасной вариант: то, что стоит в телефоне</string>
+    <string name="fonts_loaded">Встроенные семейства загружены</string>
+    <string name="fonts_missing">Файлы шрифтов не найдены в приложении</string>
+    <string name="msg_font_changed">Шрифт изменён</string>
+    <string name="font_preview_line">Съешь ещё этих мягких булок</string>
+    <string name="font_active">ВЫБРАН</string>
+    <string name="font_choose">ВЫБРАТЬ</string>
+    <string name="more_fonts">Шрифты</string>
+    <string name="more_fonts_cap">Набор шрифтов приложения</string>
 
     <string-array name="demo_idea_situations">
         <item>Смотрел дедлайн лабы в переписке, пока шёл между парами. Открыть приложение ради одной даты неудобно.</item>

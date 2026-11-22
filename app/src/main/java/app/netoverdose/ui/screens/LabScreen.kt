@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,8 +43,8 @@ import app.netoverdose.ui.components.SegmentedControl
 import app.netoverdose.ui.components.SharpSlider
 import app.netoverdose.ui.components.SharpSwitch
 import app.netoverdose.ui.components.SwatchDot
+import app.netoverdose.ui.components.animatedSpectrumBrush
 import app.netoverdose.ui.theme.MonoFamily
-import app.netoverdose.ui.theme.availableFamilies
 import java.util.Locale
 
 @Composable
@@ -55,8 +54,6 @@ fun LabScreen(controller: DesignController, onBack: () -> Unit) {
     val palette = LocalDesign.current
     val context = LocalContext.current
     val app = context.applicationContext as NetoverdoseApp
-    // Only families whose TTFs are actually bundled are offered; empty means none are.
-    val families = remember(context) { availableFamilies(context) }
     // Resolved during composition: reading resources off LocalContext inside a callback is
     // what Compose lint flags, and these labels never change at runtime.
     val shareTitle = stringResource(R.string.share_tokens)
@@ -210,25 +207,6 @@ fun LabScreen(controller: DesignController, onBack: () -> Unit) {
                 }
             }
 
-            if (families.size > 1) {
-                item {
-                    Group(stringResource(R.string.group_fonts)) {
-                        SegmentedControl(
-                            options = families.map { it.key },
-                            selected = families.indexOfFirst { it.key == tokens.fontFamily },
-                            onSelect = { index ->
-                                controller.update { it.copy(fontFamily = families[index].key) }
-                            }
-                        )
-                        Text(
-                            stringResource(R.string.group_fonts_hint),
-                            style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp, lineHeight = 15.sp),
-                            color = palette.muted
-                        )
-                    }
-                }
-            }
-
             item {
                 Group(stringResource(R.string.group_motion)) {
                     SliderRow(
@@ -303,7 +281,7 @@ private fun Group(title: String, content: @Composable () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.height(8.dp).fillMaxWidth(0.03f).background(palette.rainbowBrush))
+            Box(Modifier.height(8.dp).fillMaxWidth(0.03f).background(animatedSpectrumBrush()))
             SectionLabel(title)
         }
         content()

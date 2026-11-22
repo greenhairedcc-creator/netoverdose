@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -90,6 +91,7 @@ import app.netoverdose.ui.components.SharpSwitch
 import app.netoverdose.ui.components.SharpTextField
 import app.netoverdose.ui.components.StepCheckbox
 import app.netoverdose.ui.components.WaveLabels
+import app.netoverdose.ui.components.animatedSpectrumBrush
 import app.netoverdose.ui.components.WindowWave
 import app.netoverdose.ui.components.signedReserve
 import app.netoverdose.ui.theme.MonoFamily
@@ -260,7 +262,7 @@ private fun TaskCardBody(viewModel: TaskCardViewModel, onBack: () -> Unit) {
     val item = state.item
 
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = palette.pad, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -636,8 +638,9 @@ private fun SprintBlock(
 private fun ForecastText(task: ProgressTask, now: Long) {
     val palette = LocalDesign.current
     val zone = ZoneId.systemDefault()
+    // Same travelling spectrum as the rest of the UI, so nothing stays frozen mid-rainbow.
     val accent = SpanStyle(
-        brush = palette.rainbowBrush,
+        brush = animatedSpectrumBrush(),
         fontStyle = if (palette.italics) FontStyle.Italic else FontStyle.Normal,
         fontWeight = FontWeight.SemiBold
     )

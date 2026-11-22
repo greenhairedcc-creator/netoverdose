@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -209,7 +210,7 @@ fun HorizonScreen(viewModel: HorizonViewModel = viewModel(), onOpenTask: (Long) 
 
     AppBackground {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                 .padding(horizontal = palette.pad, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(palette.gap)
         ) {

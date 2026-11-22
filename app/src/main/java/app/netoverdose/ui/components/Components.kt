@@ -30,11 +30,14 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
@@ -57,6 +60,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.SolidColor
+// API existence is proven by compilation. What is NOT proven is the visual result of the
+// tiling: that Repeated over spectrum + first() hides the seam. That needs eyes on a device.
+// VERIFY (visual only): no single-colour stretch appears on the strip at any phase.
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -231,11 +238,106 @@ fun WindowWave(
     }
 }
 
+/**
+ * Single source of the travelling phase for the whole app.
+ *
+ * One infinite transition is hoisted to the composition root and shared by every rainbow
+ * element. Giving each element its own transition created a separate animation loop per
+ * call site, which stalled the UI thread for seconds ("Skipped 307 frames").
+ *
+ * The value runs 0..1 and is used as a *fraction of the element width*, never as a pixel
+ * offset: a pixel span made the loop point land inside the visible strip.
+ */
+val LocalSpectrumShift = compositionLocalOf { 0f }
+
+@Composable
+fun SpectrumShiftProvider(
+    durationMs: Int,
+    content: @Composable () -> Unit
+) {
+    if (durationMs <= 0) {
+        CompositionLocalProvider(LocalSpectrumShift provides 0f, content = content)
+        return
+    }
+    val transition = rememberInfiniteTransition(label = "spectrum")
+    val shift by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "spectrumShift"
+    )
+    CompositionLocalProvider(LocalSpectrumShift provides shift, content = content)
+}
+
+@Composable
+fun rememberSpectrumShift(): Float = LocalSpectrumShift.current
+
+/**
+ * Repeating linear gradient over the design spectrum, phase-shifted by [shift].
+ *
+ * The pattern period equals the element width, and the shift over one full cycle equals
+ * that same period, so `shift = 1` renders exactly the frame `shift = 0` renders. That
+ * equality is what removes the seam.
+ *
+ * The previous version scaled the offset by `n/(n+1)` to line up the closing colour. With
+ * `TileMode.Clamp` that made the travelled distance 8/9 of the period, so by the end of a
+ * cycle 89% of the strip was painted flat with the last spectrum colour, then snapped back
+ * to the start. TileMode.Repeated makes the decelerating ramp unnecessary.
+ */
+fun spectrumBrush(
+    spectrum: List<Color>,
+    shift: Float,
+    sizePx: Float
+): Brush {
+    if (spectrum.isEmpty()) return SolidColor(Color.Transparent)
+    // The closing colour repeats the first one so the ramp wraps without a hard cut.
+    val colors = spectrum + spectrum.first()
+    val span = sizePx.coerceAtLeast(1f)
+    val offset = -shift * span
+    return Brush.linearGradient(
+        colors = colors,
+        start = Offset(offset, 0f),
+        end = Offset(offset + span, 0f),
+        tileMode = TileMode.Repeated
+    )
+}
+
+/**
+ * Animated spectrum sized to a fixed span, for text brushes that cannot measure themselves.
+ */
+@Composable
+fun animatedSpectrumBrush(spanPx: Float = 900f): Brush {
+    val palette = LocalDesign.current
+    val shift = LocalSpectrumShift.current
+    return spectrumBrush(palette.spectrum, shift, spanPx)
+}
+
+/**
+ * Paints the travelling spectrum behind the element, sized to its real width so the loop
+ * never drifts. This is the sanctioned way to animate a rainbow on a surface.
+ */
+@Composable
+fun Modifier.spectrumBackground(alpha: Float = 1f): Modifier {
+    val spectrum = LocalDesign.current.spectrum
+    val shift = LocalSpectrumShift.current
+    return this.then(
+        Modifier.drawWithContent {
+            drawRect(
+                spectrumBrush(spectrum, shift, size.width),
+                alpha = alpha.coerceIn(0f, 1f)
+            )
+            drawContent()
+        }
+    )
+}
+
 @Composable
 fun RainbowHairline(modifier: Modifier = Modifier, alpha: Float = 1f) {
-    val palette = LocalDesign.current
     // rainbowHard gives the crisp 8-band ribbon from the reference rather than a soft blend.
-    Box(modifier.height(2.dp).background(palette.rainbowHard, alpha = alpha.coerceIn(0f, 1f)))
+    Box(modifier.height(2.dp).spectrumBackground(alpha))
 }
 
 @Composable
@@ -261,7 +363,7 @@ fun ItalicAccent(
         text = text,
         modifier = modifier,
         style = TextStyle(
-            brush = if (gradient) palette.rainbowBrush else SolidColor(palette.ink),
+            brush = if (gradient) animatedSpectrumBrush() else SolidColor(palette.ink),
             fontFamily = SerifFamily,
             fontStyle = if (palette.italics) FontStyle.Italic else FontStyle.Normal,
             fontWeight = FontWeight.Bold,
@@ -274,28 +376,8 @@ fun ItalicAccent(
 @Composable
 fun BrandMark(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.TextUnit = 22.sp) {
     val palette = LocalDesign.current
-    // "overdose" is gradient text in the reference (class .grad): a brush plus an animated
-    // background-position slide, so the spectrum visibly travels through the word.
-    val duration = palette.gradientDurationMs
-    val infinite = rememberInfiniteTransition(label = "brand")
-    val shift by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(if (duration > 0) duration else 1, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "brandShift"
-    )
-    val spectrum = palette.spectrum
-    // Repeat the ramp twice so the slide wraps without a visible seam.
-    val colors = spectrum + spectrum.first()
-    val offset = if (duration > 0) -shift * 400f else 0f
-    val brush = Brush.linearGradient(
-        colors = colors,
-        start = Offset(offset, 0f),
-        end = Offset(offset + 800f, 0f)
-    )
+    // "overdose" is gradient text: the same travelling spectrum the rest of the UI uses.
+    val brush = animatedSpectrumBrush()
 
     Row(modifier, verticalAlignment = Alignment.Bottom) {
         Text(
@@ -404,6 +486,8 @@ fun SwatchDot(color: Color, size: Dp = 14.dp) {
 @Composable
 fun FileTile(label: String, size: Dp = 44.dp, burnt: Boolean = false) {
     val palette = LocalDesign.current
+    // Resolved during composition; Brush is not @Composable and cannot be built in Canvas.
+    val foldBrush = animatedSpectrumBrush()
     Box(
         Modifier.size(size).clip(palette.tileShape).background(palette.tile)
             .border(1.dp, palette.rule, palette.tileShape),
@@ -417,7 +501,7 @@ fun FileTile(label: String, size: Dp = 44.dp, burnt: Boolean = false) {
                 lineTo(this@Canvas.size.width, corner)
                 close()
             }
-            drawPath(path, palette.rainbowBrush, alpha = palette.rainAlpha)
+            drawPath(path, foldBrush, alpha = palette.rainAlpha)
         }
         if (burnt && palette.hatch) {
             Canvas(Modifier.matchParentSize()) {

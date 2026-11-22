@@ -49,7 +49,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.netoverdose.NetoverdoseApp
 import app.netoverdose.R
-import app.netoverdose.data.StoredAttachment
 import app.netoverdose.data.TaskItem
 import app.netoverdose.data.nowTicker
 import app.netoverdose.data.toProgress
@@ -82,6 +81,7 @@ import app.netoverdose.ui.components.SectionLabel
 import app.netoverdose.ui.components.SharpTextField
 import app.netoverdose.ui.components.Subhead
 import app.netoverdose.ui.components.WaveLabels
+import app.netoverdose.ui.components.animatedSpectrumBrush
 import app.netoverdose.ui.components.WindowWave
 import app.netoverdose.ui.theme.MonoFamily
 import app.netoverdose.ui.theme.SerifFamily
@@ -203,11 +203,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { repo.reorder(orderedIds) }
     }
 
-    /** Removes a copy made for the intake panel that the user chose not to save. */
-    fun discardAttachment(stored: StoredAttachment) {
-        viewModelScope.launch { repo.discardAttachment(stored) }
-    }
-
     fun start(id: Long) = launchWithMessage({ repo.start(id) }, R.string.msg_started, app.sounds::tick)
     fun close(id: Long) = launchWithMessage({ repo.close(id) }, R.string.msg_closed, app.sounds::complete)
     fun reopen(id: Long) = launchWithMessage({ repo.reopen(id) }, R.string.msg_reopened, app.sounds::tick)
@@ -237,16 +232,17 @@ fun MainScreen(viewModel: MainViewModel = viewModel(), onOpenTask: (Long) -> Uni
     val zone = ZoneId.systemDefault()
     val context = androidx.compose.ui.platform.LocalContext.current
     val app = context.applicationContext as NetoverdoseApp
-    // A shared file lands here instead of being imported straight into the plan (A2).
-    var sharedAttachment by remember { mutableStateOf<StoredAttachment?>(null) }
 
-    LaunchedEffect(app) {
-        app.pendingShare.collect { stored ->
-            intakeViewModel.reset()
-            intakeViewModel.prefill(stored)
-            sharedAttachment = stored
-            showIntake = true
-        }
+    // The only place that consumes a shared file. AppRoot watches the same value but never
+    // clears it, so the form can only ever open once per share, survive the splash, and be
+    // re-read after the activity is recreated. takeShare() nulls the value; ownership of the
+    // copy then moves to IntakeViewModel, which deletes it on close or hands it to the task.
+    val pendingShare by app.pendingShare.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingShare) {
+        if (pendingShare == null) return@LaunchedEffect
+        val taken = app.takeShare() ?: return@LaunchedEffect
+        intakeViewModel.startCleanForm(taken)
+        showIntake = true
     }
 
     AppBackground {
@@ -281,7 +277,12 @@ fun MainScreen(viewModel: MainViewModel = viewModel(), onOpenTask: (Long) -> Uni
                         }
                         OutlineButton(
                             text = stringResource(R.string.action_add),
-                            onClick = { showIntake = true },
+                            onClick = {
+                                // A new form never inherits the previous session's text,
+                                // deadline or attachment (the view model outlives the sheet).
+                                intakeViewModel.startCleanForm()
+                                showIntake = true
+                            },
                             height = 44.dp,
                             modifier = Modifier.padding(start = 12.dp)
                         )
@@ -406,17 +407,10 @@ fun MainScreen(viewModel: MainViewModel = viewModel(), onOpenTask: (Long) -> Uni
             viewModel = intakeViewModel,
             onDismiss = {
                 showIntake = false
-                // The copy never became a task, so it must not stay in filesDir forever.
-                val stored = sharedAttachment
-                if (stored != null) {
-                    sharedAttachment = null
-                    viewModel.discardAttachment(stored)
-                }
+                // Nothing was saved: the copies (shared or picked) must not stay in filesDir.
+                intakeViewModel.discardDraft()
             },
-            onSaved = {
-                showIntake = false
-                sharedAttachment = null
-            }
+            onSaved = { showIntake = false }
         )
     }
 }
@@ -439,8 +433,9 @@ private fun TempoBlock(summary: ReserveSummary, days: List<DayReserve>) {
     val behindValue = stringResource(R.string.tempo_behind_value, value)
     val onTime = stringResource(R.string.tempo_on_time)
     val noData = stringResource(R.string.tempo_no_data)
+    // Same travelling spectrum as the rest of the UI, so nothing stays frozen mid-rainbow.
     val accent = SpanStyle(
-        brush = palette.rainbowBrush,
+        brush = animatedSpectrumBrush(),
         fontStyle = if (palette.italics) FontStyle.Italic else FontStyle.Normal,
         fontWeight = FontWeight.Bold
     )

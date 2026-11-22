@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="app.netoverdose.domain.TimeTextTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-22T15:43:21.261Z" hostname="WINDOSE20" time="0.009">
+<testsuite name="app.netoverdose.domain.TimeTextTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-22T21:32:12.578Z" hostname="WINDOSE20" time="0.013">
   <properties/>
-  <testcase name="sizeSwitchesUnits" classname="app.netoverdose.domain.TimeTextTest" time="0.0"/>
+  <testcase name="sizeSwitchesUnits" classname="app.netoverdose.domain.TimeTextTest" time="0.001"/>
   <testcase name="extensionIsUppercaseAndBounded" classname="app.netoverdose.domain.TimeTextTest" time="0.0"/>
-  <testcase name="dayLabelIsRussianCapitalized" classname="app.netoverdose.domain.TimeTextTest" time="0.006"/>
+  <testcase name="dayLabelIsRussianCapitalized" classname="app.netoverdose.domain.TimeTextTest" time="0.01"/>
   <testcase name="overdueIsFlagged" classname="app.netoverdose.domain.TimeTextTest" time="0.002"/>
   <testcase name="remainingSplitsDaysHoursMinutes" classname="app.netoverdose.domain.TimeTextTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
