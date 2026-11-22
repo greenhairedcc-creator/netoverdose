@@ -31,7 +31,7 @@ data class TaskItem(val task: TaskEntity, val attachment: AttachmentEntity?)
 
 data class ImportResult(val inserted: Int, val failed: Int)
 
-data class RestoreResult(val tasks: Int, val files: Int, val ideas: Int)
+data class RestoreResult(val tasks: Int, val files: Int, val ideas: Int, val notes: Int = 0)
 
 fun TaskEntity.toProgress(): ProgressTask =
     ProgressTask(id, difficulty, windowStart, deadline, status, startedAt, closedAt)
@@ -167,6 +167,48 @@ class TaskRepository(
         }
         reminders.schedule(entity.copy(id = id))
         id
+    }
+
+    /**
+     * Single entry point for changing what the intake panel asks for: title, difficulty,
+     * deadline and the "remind at window start" flag. Sprint and status are left alone.
+     */
+    suspend fun updateTask(
+        id: Long,
+        title: String,
+        difficulty: Int,
+        deadline: Long,
+        remind: Boolean
+    ) = withContext(Dispatchers.IO) {
+        val task = db.tasks().get(id) ?: return@withContext
+        val trimmed = title.trim().take(200).ifEmpty { task.title }
+        val updated = task.copy(
+            title = trimmed,
+            difficulty = difficulty.coerceIn(1, 5),
+            // The window always stays open: an old deadline would make the wave meaningless.
+            deadline = deadline.coerceAtLeast(task.windowStart + 1),
+            remindOnWindowStart = remind
+        )
+        val now = System.currentTimeMillis()
+        db.withTransaction {
+            db.tasks().update(updated)
+            db.events().insert(EventEntity(taskId = id, type = EventType.EDITED, at = now, payload = null))
+        }
+        reminders.schedule(updated)
+    }
+
+    /** Drops a copied-but-never-attached file, e.g. when the share sheet form is closed. */
+    suspend fun discardAttachment(stored: StoredAttachment) = withContext(Dispatchers.IO) {
+        runCatching { File(context.filesDir, stored.storedPath).parentFile?.deleteRecursively() }
+        Unit
+    }
+
+    /**
+     * Copies a shared file into private storage without creating a task, so the intake
+     * panel can still ask for difficulty and deadline before anything is persisted (A2).
+     */
+    suspend fun prepareShare(uri: Uri): StoredAttachment = withContext(Dispatchers.IO) {
+        copyToPrivateStorage(uri)
     }
 
     suspend fun start(id: Long) = withContext(Dispatchers.IO) {
@@ -365,7 +407,8 @@ class TaskRepository(
             attachments = db.attachments().all(),
             steps = db.steps().all(),
             events = db.events().all(),
-            ideas = db.ideas().all()
+            ideas = db.ideas().all(),
+            notes = db.notes().all()
         )
         ExportWriter.write(context, uri, bundle)
     }
@@ -382,6 +425,7 @@ class TaskRepository(
             db.tasks().clear()
             db.events().clear()
             db.ideas().clear()
+            db.notes().clear()
 
             bundle.tasks.forEach { db.tasks().insert(it) }
             bundle.attachments.forEach { attachment ->
@@ -396,13 +440,19 @@ class TaskRepository(
             bundle.steps.forEach { db.steps().insert(it) }
             bundle.events.forEach { db.events().insert(it) }
             bundle.ideas.forEach { db.ideas().insert(it) }
+            bundle.notes.forEach { db.notes().insert(it) }
         }
 
         previous.forEach { attachment ->
             runCatching { File(context.filesDir, attachment.storedPath).parentFile?.deleteRecursively() }
         }
         reminders.reschedule(db.tasks().openOnce())
-        RestoreResult(tasks = bundle.tasks.size, files = files, ideas = bundle.ideas.size)
+        RestoreResult(
+            tasks = bundle.tasks.size,
+            files = files,
+            ideas = bundle.ideas.size,
+            notes = bundle.notes.size
+        )
     }
 
     suspend fun resetDemoData(): Unit = withContext(Dispatchers.IO) {

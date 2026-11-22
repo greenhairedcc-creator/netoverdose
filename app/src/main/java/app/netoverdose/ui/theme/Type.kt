@@ -37,24 +37,60 @@ private fun family(vararg entries: Triple<Int, FontWeight, FontStyle>): FontFami
 
 /** Called once from Application.onCreate, before any composition happens. */
 fun installFonts(context: Context) {
-    SerifFamily = family(
-        Triple(fontId(context, "noto_serif_regular"), FontWeight.Normal, FontStyle.Normal),
-        Triple(fontId(context, "noto_serif_bold"), FontWeight.Bold, FontStyle.Normal),
-        Triple(fontId(context, "noto_serif_italic"), FontWeight.Normal, FontStyle.Italic),
-        Triple(fontId(context, "noto_serif_bold_italic"), FontWeight.Bold, FontStyle.Italic)
-    ) ?: FontFamily.Serif
+    SerifFamily = serifFamily(context) ?: FontFamily.Serif
+    SansFamily = sansFamily(context) ?: FontFamily.Default
+    MonoFamily = monoFamily(context) ?: FontFamily.Monospace
+}
 
-    SansFamily = family(
-        Triple(fontId(context, "roboto_regular"), FontWeight.Normal, FontStyle.Normal),
-        Triple(fontId(context, "roboto_medium"), FontWeight.Medium, FontStyle.Normal),
-        Triple(fontId(context, "roboto_bold"), FontWeight.Bold, FontStyle.Normal)
-    ) ?: FontFamily.Default
+private fun serifFamily(context: Context): FontFamily? = family(
+    Triple(fontId(context, "noto_serif_regular"), FontWeight.Normal, FontStyle.Normal),
+    Triple(fontId(context, "noto_serif_bold"), FontWeight.Bold, FontStyle.Normal),
+    Triple(fontId(context, "noto_serif_italic"), FontWeight.Normal, FontStyle.Italic),
+    Triple(fontId(context, "noto_serif_bold_italic"), FontWeight.Bold, FontStyle.Italic)
+)
 
-    MonoFamily = family(
-        Triple(fontId(context, "roboto_mono_regular"), FontWeight.Normal, FontStyle.Normal),
-        Triple(fontId(context, "roboto_mono_medium"), FontWeight.Medium, FontStyle.Normal),
-        Triple(fontId(context, "roboto_mono_bold"), FontWeight.Bold, FontStyle.Normal)
-    ) ?: FontFamily.Monospace
+private fun sansFamily(context: Context): FontFamily? = family(
+    Triple(fontId(context, "roboto_regular"), FontWeight.Normal, FontStyle.Normal),
+    Triple(fontId(context, "roboto_medium"), FontWeight.Medium, FontStyle.Normal),
+    Triple(fontId(context, "roboto_bold"), FontWeight.Bold, FontStyle.Normal)
+)
+
+private fun monoFamily(context: Context): FontFamily? = family(
+    Triple(fontId(context, "roboto_mono_regular"), FontWeight.Normal, FontStyle.Normal),
+    Triple(fontId(context, "roboto_mono_medium"), FontWeight.Medium, FontStyle.Normal),
+    Triple(fontId(context, "roboto_mono_bold"), FontWeight.Bold, FontStyle.Normal)
+)
+
+/** One selectable typeface set. `key` is persisted in the design tokens. */
+data class FamilyOption(
+    val key: String,
+    val serif: FontFamily?,
+    val sans: FontFamily?,
+    val mono: FontFamily?
+)
+
+const val DEFAULT_FAMILY_KEY = "bundle"
+
+/**
+ * Families actually shipped in res/font. When the TTFs are missing the list is empty and
+ * the Lab hides the picker instead of offering variants that would look identical.
+ */
+fun availableFamilies(context: Context): List<FamilyOption> {
+    val bundle = FamilyOption(
+        key = DEFAULT_FAMILY_KEY,
+        serif = serifFamily(context),
+        sans = sansFamily(context),
+        mono = monoFamily(context)
+    )
+    return listOfNotNull(bundle.takeIf { it.serif != null || it.sans != null || it.mono != null })
+}
+
+/** Applies the persisted choice, falling back to the platform families. */
+fun applyFamily(context: Context, key: String) {
+    val option = availableFamilies(context).firstOrNull { it.key == key }
+    SerifFamily = option?.serif ?: FontFamily.Serif
+    SansFamily = option?.sans ?: FontFamily.Default
+    MonoFamily = option?.mono ?: FontFamily.Monospace
 }
 
 fun netoverdoseTypography(): Typography = Typography(

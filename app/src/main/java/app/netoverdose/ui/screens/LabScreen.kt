@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +45,7 @@ import app.netoverdose.ui.components.SharpSlider
 import app.netoverdose.ui.components.SharpSwitch
 import app.netoverdose.ui.components.SwatchDot
 import app.netoverdose.ui.theme.MonoFamily
+import app.netoverdose.ui.theme.availableFamilies
 import java.util.Locale
 
 @Composable
@@ -53,16 +55,25 @@ fun LabScreen(controller: DesignController, onBack: () -> Unit) {
     val palette = LocalDesign.current
     val context = LocalContext.current
     val app = context.applicationContext as NetoverdoseApp
+    // Only families whose TTFs are actually bundled are offered; empty means none are.
+    val families = remember(context) { availableFamilies(context) }
+    // Resolved during composition: reading resources off LocalContext inside a callback is
+    // what Compose lint flags, and these labels never change at runtime.
+    val shareTitle = stringResource(R.string.share_tokens)
+    val noAppText = stringResource(R.string.msg_no_app)
+    val presetText = stringResource(R.string.msg_preset)
+    val resetText = stringResource(R.string.msg_reset)
+    val randomText = stringResource(R.string.msg_random)
 
     fun share() {
         val intent = Intent(Intent.ACTION_SEND)
             .setType("text/plain")
-            .putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.share_tokens))
+            .putExtra(Intent.EXTRA_SUBJECT, shareTitle)
             .putExtra(Intent.EXTRA_TEXT, controller.exportText())
         try {
-            context.startActivity(Intent.createChooser(intent, context.getString(R.string.share_tokens)))
+            context.startActivity(Intent.createChooser(intent, shareTitle))
         } catch (error: ActivityNotFoundException) {
-            app.messages.tryEmit(context.getString(R.string.msg_no_app))
+            app.messages.tryEmit(noAppText)
         }
     }
 
@@ -102,7 +113,7 @@ fun LabScreen(controller: DesignController, onBack: () -> Unit) {
                                     .border(1.dp, if (active) palette.ink else palette.rule, palette.shape)
                                     .clickable {
                                         controller.applyPreset(key)
-                                        app.messages.tryEmit(context.getString(R.string.msg_preset))
+                                        app.messages.tryEmit(presetText)
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -199,6 +210,25 @@ fun LabScreen(controller: DesignController, onBack: () -> Unit) {
                 }
             }
 
+            if (families.size > 1) {
+                item {
+                    Group(stringResource(R.string.group_fonts)) {
+                        SegmentedControl(
+                            options = families.map { it.key },
+                            selected = families.indexOfFirst { it.key == tokens.fontFamily },
+                            onSelect = { index ->
+                                controller.update { it.copy(fontFamily = families[index].key) }
+                            }
+                        )
+                        Text(
+                            stringResource(R.string.group_fonts_hint),
+                            style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp, lineHeight = 15.sp),
+                            color = palette.muted
+                        )
+                    }
+                }
+            }
+
             item {
                 Group(stringResource(R.string.group_motion)) {
                     SliderRow(
@@ -221,13 +251,13 @@ fun LabScreen(controller: DesignController, onBack: () -> Unit) {
                         Box(Modifier.weight(1f)) {
                             MiniButton(stringResource(R.string.action_reset), onClick = {
                                 controller.applyPreset("ice")
-                                app.messages.tryEmit(context.getString(R.string.msg_reset))
+                                app.messages.tryEmit(resetText)
                             }, modifier = Modifier.fillMaxWidth())
                         }
                         Box(Modifier.weight(1f)) {
                             MiniButton(stringResource(R.string.action_random), onClick = {
                                 controller.randomize()
-                                app.messages.tryEmit(context.getString(R.string.msg_random))
+                                app.messages.tryEmit(randomText)
                             }, modifier = Modifier.fillMaxWidth())
                         }
                         Box(Modifier.weight(1f)) {

@@ -68,8 +68,8 @@
     <string name="more_import_cap">ZIP заменит текущие данные</string>
     <string name="more_import_busy">Читаю архив…</string>
     <string name="import_title">Восстановить из архива?</string>
-    <string name="import_text">Текущие задачи, вложения, шаги и идеи будут заменены содержимым ZIP.</string>
-    <string name="msg_import_done">Восстановлено · задач %1$d, файлов %2$d</string>
+    <string name="import_text">Текущие задачи, вложения, шаги, идеи и заметки будут заменены содержимым ZIP.</string>
+    <string name="msg_import_done">Восстановлено · задач %1$d, файлов %2$d, заметок %3$d</string>
     <string name="msg_import_failed">Не удалось прочитать архив</string>
 
     <string name="more_battery">Фоновая работа</string>

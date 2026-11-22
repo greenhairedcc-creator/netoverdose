@@ -18,18 +18,13 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,7 +46,7 @@ import app.netoverdose.design.LocalDesign
 import app.netoverdose.domain.AutoDifficulty
 import app.netoverdose.domain.DeadlineOptions
 import app.netoverdose.domain.HistoryTask
-import app.netoverdose.domain.TimeText
+import app.netoverdose.notify.rememberNotificationGate
 import app.netoverdose.ui.components.AccentButton
 import app.netoverdose.ui.components.ItalicAccent
 import app.netoverdose.ui.components.RainbowHairline
@@ -94,6 +89,17 @@ class IntakeViewModel(application: Application) : AndroidViewModel(application) 
                 HistoryTask(it.task.title, it.task.difficulty)
             }
         }
+    }
+
+    /**
+     * Seeds the form from a shared file (A2). Difficulty stays at the default and the
+     * estimate keeps running, so the user is still the one who picks both numbers;
+     * this only saves retyping the title.
+     */
+    fun prefill(stored: StoredAttachment) {
+        attachment = stored
+        if (title.isBlank()) title = stored.displayName
+        refreshEstimate()
     }
 
     /** Picks a level by hand and freezes the estimate. */
@@ -189,6 +195,18 @@ fun IntakeSheet(
     val palette = LocalDesign.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+    val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as NetoverdoseApp
+    val deniedText = stringResource(R.string.msg_permission_denied)
+
+    // Switching the reminder on for the first time must also ask for POST_NOTIFICATIONS (A4).
+    val gate = rememberNotificationGate { granted ->
+        if (granted) {
+            viewModel.remind = true
+            scope.launch { app.reminders.setEnabled(true, app.repository.openTasksOnce()) }
+        } else {
+            app.messages.tryEmit(deniedText)
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.attach(uri)
@@ -248,24 +266,10 @@ fun IntakeSheet(
             }
 
             SectionLabel(stringResource(R.string.label_difficulty))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                (1..5).forEach { level ->
-                    val active = level - 1 == viewModel.difficulty
-                    Box(
-                        Modifier.weight(1f).height(40.dp).clip(palette.shape)
-                            .background(if (active) palette.ink else Color.Transparent)
-                            .border(1.dp, if (active) palette.ink else palette.rule, palette.shape)
-                            .clickable { viewModel.pickDifficulty(level - 1) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            level.toString(),
-                            style = TextStyle(fontFamily = MonoFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp),
-                            color = if (active) palette.bg else palette.muted
-                        )
-                    }
-                }
-            }
+            DifficultyPicker(
+                selected = viewModel.difficulty,
+                onSelect = { level -> viewModel.pickDifficulty(level) }
+            )
             Text(
                 stringResource(difficultyLabel(viewModel.difficulty)),
                 style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp, lineHeight = 15.sp),
@@ -303,7 +307,12 @@ fun IntakeSheet(
                     style = TextStyle(fontFamily = MonoFamily, fontSize = 11.sp),
                     color = palette.text
                 )
-                SharpSwitch(checked = viewModel.remind, onChange = { viewModel.remind = it })
+                SharpSwitch(
+                    checked = viewModel.remind,
+                    onChange = { value ->
+                        if (value) gate(true) else viewModel.remind = false
+                    }
+                )
             }
 
             Box(
@@ -334,87 +343,4 @@ fun IntakeSheet(
     scope
 }
 
-/**
- * Inline calendar for the "Своя" deadline. Selecting a day converts the picker's UTC date
- * to the local end of that day, matching the other deadline presets.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CustomDateBlock(selected: Long?, zone: ZoneId, onSelect: (Long) -> Unit) {
-    val palette = LocalDesign.current
-    val today = remember {
-        java.time.Instant.ofEpochMilli(System.currentTimeMillis()).atZone(zone).toLocalDate()
-    }
-    val initial = remember(selected) {
-        selected
-            ?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
-            ?: today.plusDays(1)
-    }
-    val pickerState = rememberDatePickerState(
-        initialSelectedDateMillis = DeadlineOptions.toUtcDate(initial)
-    )
 
-    // Mirror the picker selection into the form so Save can enable itself.
-    LaunchedEffect(pickerState.selectedDateMillis) {
-        val picked = pickerState.selectedDateMillis ?: return@LaunchedEffect
-        onSelect(DeadlineOptions.fromUtcDate(picked, zone))
-    }
-
-    Column(
-        Modifier.fillMaxWidth().clip(palette.shape).border(1.dp, palette.rule, palette.shape)
-            .padding(bottom = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        DatePicker(
-            state = pickerState,
-            showModeToggle = false,
-            title = {
-                Text(
-                    stringResource(R.string.deadline_pick_day),
-                    style = TextStyle(fontFamily = MonoFamily, fontSize = 11.sp),
-                    color = palette.muted,
-                    modifier = Modifier.padding(start = 16.dp, top = 12.dp)
-                )
-            },
-            headline = null,
-            modifier = Modifier.fillMaxWidth(),
-            colors = DatePickerDefaults.colors(
-                containerColor = palette.bg,
-                titleContentColor = palette.muted,
-                headlineContentColor = palette.ink,
-                weekdayContentColor = palette.muted,
-                subheadContentColor = palette.muted,
-                navigationContentColor = palette.ink,
-                yearContentColor = palette.text,
-                currentYearContentColor = palette.accentText,
-                selectedYearContentColor = palette.onAccent,
-                selectedYearContainerColor = palette.accent,
-                dayContentColor = palette.text,
-                selectedDayContentColor = palette.onAccent,
-                selectedDayContainerColor = palette.accent,
-                todayContentColor = palette.accentText,
-                todayDateBorderColor = palette.accentText
-            )
-        )
-        selected?.let {
-            Text(
-                stringResource(
-                    R.string.deadline_chosen,
-                    TimeText.dayLabel(it, zone),
-                    TimeText.dateShort(it, zone)
-                ),
-                style = TextStyle(fontFamily = MonoFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold),
-                color = palette.accentText,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            )
-        }
-    }
-}
-
-private fun difficultyLabel(index: Int): Int = when (index) {
-    0 -> R.string.diff_1
-    1 -> R.string.diff_2
-    2 -> R.string.diff_3
-    3 -> R.string.diff_4
-    else -> R.string.diff_5
-}

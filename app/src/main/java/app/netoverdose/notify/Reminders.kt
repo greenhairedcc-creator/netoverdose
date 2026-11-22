@@ -1,6 +1,7 @@
 package app.netoverdose.notify
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -71,6 +72,12 @@ class Reminders(private val context: Context) {
         tasks.forEach { schedule(it) }
     }
 
+    /** Single switch: persists the flag and re-plans work in one place. */
+    fun setEnabled(enabled: Boolean, tasks: List<TaskEntity>) {
+        this.enabled = enabled
+        if (enabled) reschedule(tasks) else cancelAll()
+    }
+
     fun cancel(taskId: Long) {
         WorkManager.getInstance(context).cancelAllWorkByTag(taskTag(taskId))
     }
@@ -109,6 +116,13 @@ class Reminders(private val context: Context) {
         val DEADLINE_REMINDER_HOURS = listOf(24, 3)
         private const val KEY_ENABLED = "notifications_enabled"
         fun taskTag(taskId: Long) = "netoverdose-task-$taskId"
+
+        /** POST_NOTIFICATIONS only exists on API 33+; below that the permission is implicit. */
+        fun isPermissionGranted(context: Context): Boolean =
+            android.os.Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
     }
 }
 
@@ -125,10 +139,9 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
         val manager = NotificationManagerCompat.from(applicationContext)
         if (!manager.areNotificationsEnabled()) return Result.success()
-        if (android.os.Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED
-        ) return Result.success()
+        // The permission can be revoked between enqueue and delivery, so it is re-checked here.
+        val permitted = Reminders.isPermissionGranted(applicationContext)
+        if (!permitted) return Result.success()
 
         val kind = inputData.getString(Reminders.KEY_KIND) ?: Reminders.KIND_WINDOW
         val hours = inputData.getInt(Reminders.KEY_HOURS, 0)
@@ -163,6 +176,8 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             .setAutoCancel(true)
             .build()
 
+        // Guarded by the areNotificationsEnabled + isPermissionGranted checks above.
+        @SuppressLint("MissingPermission")
         manager.notify((taskId * 10 + index).toInt(), notification)
         return Result.success()
     }

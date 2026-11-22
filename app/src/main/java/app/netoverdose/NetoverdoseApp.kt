@@ -6,6 +6,7 @@ import app.netoverdose.data.AppDatabase
 import app.netoverdose.data.MIGRATION_1_2
 import app.netoverdose.data.MIGRATION_2_3
 import app.netoverdose.data.MIGRATION_3_4
+import app.netoverdose.data.StoredAttachment
 import app.netoverdose.data.TaskRepository
 import app.netoverdose.design.DesignController
 import app.netoverdose.notify.Reminders
@@ -37,6 +38,12 @@ class NetoverdoseApp : Application() {
 
     /** One-shot user messages produced outside of screens (share intake, workers). */
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
+
+    /**
+     * A shared file waiting for the intake panel (A2). It is a copy in private storage;
+     * nothing is persisted as a task until the user saves the form.
+     */
+    val pendingShare = MutableSharedFlow<StoredAttachment>(extraBufferCapacity = 1)
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

@@ -9,7 +9,7 @@ import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-data class ExportResult(val tasks: Int, val files: Int)
+data class ExportResult(val tasks: Int, val files: Int, val notes: Int = 0)
 
 /** Writes export.json plus files/ into a single ZIP chosen through SAF. */
 object ExportWriter {
@@ -45,6 +45,6 @@ object ExportWriter {
                     }
                 }
             }
-            ExportResult(tasks = bundle.tasks.size, files = files)
+            ExportResult(tasks = bundle.tasks.size, files = files, notes = bundle.notes.size)
         }
 }

@@ -36,7 +36,9 @@ data class DesignTokens(
     val glow: Int = 45,
     val hatch: Boolean = true,
     val peaks: Boolean = true,
-    val motion: Int = 100
+    val motion: Int = 100,
+    /** Typeface set key; empty means the bundled fonts, when present. */
+    val fontFamily: String = ""
 )
 
 data class DesignState(val tokens: DesignTokens = DesignTokens(), val preset: String = "ice")
@@ -347,7 +349,8 @@ class DesignController(context: Context) {
                 "/* raw: cold=${t.cold} hue=${t.accentHue} rainbow=${t.rainbow} sharp=${t.sharp} " +
                     "grain=${t.grain} grid=${t.grid} dark=${t.dark} italics=${t.italics} slant=${t.slant} " +
                     "radius=${t.radius} tile=${t.tileRadius} density=${t.density} wave=${t.wave} " +
-                    "glow=${t.glow} hatch=${t.hatch} peaks=${t.peaks} motion=${t.motion} */"
+                    "glow=${t.glow} hatch=${t.hatch} peaks=${t.peaks} motion=${t.motion} " +
+                    "font=${t.fontFamily.ifBlank { "bundle" }} */"
             )
         }
     }
@@ -371,7 +374,8 @@ class DesignController(context: Context) {
             tileRadius = prefs.getInt("tileRadius", d.tileRadius),
             hatch = prefs.getBoolean("hatch", d.hatch),
             peaks = prefs.getBoolean("peaks", d.peaks),
-            motion = prefs.getInt("motion", d.motion)
+            motion = prefs.getInt("motion", d.motion),
+            fontFamily = prefs.getString("fontFamily", d.fontFamily) ?: d.fontFamily
         )
         return DesignState(tokens, prefs.getString("preset", "ice") ?: "ice")
     }
@@ -385,6 +389,7 @@ class DesignController(context: Context) {
             .putInt("glow", t.glow).putString("preset", preset)
             .putInt("tileRadius", t.tileRadius).putBoolean("hatch", t.hatch)
             .putBoolean("peaks", t.peaks).putInt("motion", t.motion)
+            .putString("fontFamily", t.fontFamily)
             .apply()
     }
 }

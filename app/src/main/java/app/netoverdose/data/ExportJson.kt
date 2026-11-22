@@ -11,7 +11,9 @@ data class ExportBundle(
     val attachments: List<AttachmentEntity>,
     val steps: List<StepEntity>,
     val events: List<EventEntity>,
-    val ideas: List<IdeaEntity>
+    val ideas: List<IdeaEntity>,
+    /** Day notes (v4). Defaulted so positional callers keep compiling; tested explicitly. */
+    val notes: List<NoteEntity> = emptyList()
 )
 
 data class DecodedExport(
@@ -25,7 +27,7 @@ data class DecodedExport(
  */
 object ExportJson {
 
-    const val SCHEMA_VERSION = 3
+    const val SCHEMA_VERSION = 4
 
     fun safeFileName(name: String): String =
         name.substringAfterLast('/').substringAfterLast('\\')
@@ -54,6 +56,9 @@ object ExportJson {
                     put("createdAt", task.createdAt)
                     putNullable("startedAt", task.startedAt)
                     putNullable("closedAt", task.closedAt)
+                    put("orderIndex", task.orderIndex)
+                    putNullable("sprintStartedAt", task.sprintStartedAt)
+                    putNullable("sprintEndsAt", task.sprintEndsAt)
                 })
             }
         })
@@ -111,6 +116,16 @@ object ExportJson {
             }
         })
 
+        root.put("notes", JSONArray().apply {
+            bundle.notes.forEach { note ->
+                put(JSONObject().apply {
+                    put("id", note.id)
+                    put("at", note.at)
+                    put("text", note.text)
+                })
+            }
+        })
+
         return root.toString(2)
     }
 
@@ -132,7 +147,10 @@ object ExportJson {
                     remindOnWindowStart = obj.optBoolean("remindOnWindowStart", true),
                     createdAt = obj.getLong("createdAt"),
                     startedAt = obj.longOrNull("startedAt"),
-                    closedAt = obj.longOrNull("closedAt")
+                    closedAt = obj.longOrNull("closedAt"),
+                    orderIndex = obj.optInt("orderIndex", 0),
+                    sprintStartedAt = obj.longOrNull("sprintStartedAt"),
+                    sprintEndsAt = obj.longOrNull("sprintEndsAt")
                 )
             )
         }
@@ -195,7 +213,18 @@ object ExportJson {
             )
         }
 
-        return DecodedExport(ExportBundle(tasks, attachments, steps, events, ideas), zipPaths)
+        val notes = ArrayList<NoteEntity>()
+        root.optJSONArray("notes")?.forEachObject { obj ->
+            notes.add(
+                NoteEntity(
+                    id = obj.getLong("id"),
+                    at = obj.getLong("at"),
+                    text = obj.getString("text")
+                )
+            )
+        }
+
+        return DecodedExport(ExportBundle(tasks, attachments, steps, events, ideas, notes), zipPaths)
     }
 
     private fun JSONObject.putNullable(key: String, value: Long?) {

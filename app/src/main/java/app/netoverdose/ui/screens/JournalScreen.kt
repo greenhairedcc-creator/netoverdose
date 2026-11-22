@@ -215,4 +215,5 @@ private fun typeHue(type: EventType): Float = when (type) {
     EventType.POSTPONED -> 32f
     EventType.REOPENED -> 188f
     EventType.NOTE -> 318f
+    EventType.EDITED -> 206f
 }

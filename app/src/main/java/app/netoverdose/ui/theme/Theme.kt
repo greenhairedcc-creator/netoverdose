@@ -10,6 +10,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.netoverdose.design.DesignController
@@ -29,7 +30,13 @@ private val SquareShapes = Shapes(
 fun NetoverdoseTheme(controller: DesignController, content: @Composable () -> Unit) {
     val state by controller.state.collectAsStateWithLifecycle()
     val palette: DesignPalette = remember(state.tokens) { DesignEngine.derive(state.tokens) }
-    val typography = remember(state.tokens) { netoverdoseTypography() }
+    val context = LocalContext.current
+    // The families are process-wide mutable globals, so they must be applied before the
+    // typography is built and the styles rebuilt whenever the choice changes.
+    val typography = remember(state.tokens.fontFamily) {
+        applyFamily(context, state.tokens.fontFamily)
+        netoverdoseTypography()
+    }
 
     CompositionLocalProvider(LocalDesign provides palette) {
         val scheme = if (palette.dark) {

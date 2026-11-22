@@ -5,6 +5,7 @@ import app.netoverdose.data.EventEntity
 import app.netoverdose.data.ExportBundle
 import app.netoverdose.data.ExportJson
 import app.netoverdose.data.IdeaEntity
+import app.netoverdose.data.NoteEntity
 import app.netoverdose.data.StepEntity
 import app.netoverdose.data.TaskEntity
 import app.netoverdose.domain.EventType
@@ -32,7 +33,10 @@ class ExportJsonTest {
                 remindOnWindowStart = true,
                 createdAt = now - 90_000_000L,
                 startedAt = now - 80_000_000L,
-                closedAt = null
+                closedAt = null,
+                orderIndex = 3,
+                sprintStartedAt = now - 3_600_000L,
+                sprintEndsAt = now - 2_700_000L
             ),
             TaskEntity(
                 id = 2,
@@ -44,7 +48,8 @@ class ExportJsonTest {
                 remindOnWindowStart = false,
                 createdAt = now - 400_000_000L,
                 startedAt = null,
-                closedAt = now - 120_000_000L
+                closedAt = now - 120_000_000L,
+                orderIndex = 7
             )
         ),
         attachments = listOf(
@@ -77,6 +82,10 @@ class ExportJsonTest {
         ideas = listOf(
             IdeaEntity(5, "Виджет на локскрин", now - 86_400_000L, "Шёл между парами, надо было видеть дату", 4, now - 3_600_000L),
             IdeaEntity(6, "Тёмная тема", now - 172_800_000L, "", 1, now - 172_800_000L)
+        ),
+        notes = listOf(
+            NoteEntity(id = 21, at = now - 86_400_000L, text = "День без сети — работал над лабораторной"),
+            NoteEntity(id = 22, at = now, text = "Пусто после первой пары")
         )
     )
 
@@ -112,8 +121,26 @@ class ExportJsonTest {
     }
 
     @Test
+    fun roundTripKeepsPlanOrderAndSprint() {
+        val decoded = ExportJson.decode(ExportJson.encode(sample(), now)).bundle.tasks
+        assertEquals(3, decoded[0].orderIndex)
+        assertEquals(now - 3_600_000L, decoded[0].sprintStartedAt)
+        assertEquals(now - 2_700_000L, decoded[0].sprintEndsAt)
+        assertEquals(7, decoded[1].orderIndex)
+        assertNull(decoded[1].sprintStartedAt)
+    }
+
+    @Test
+    fun roundTripKeepsDayNotes() {
+        val notes = ExportJson.decode(ExportJson.encode(sample(), now)).bundle.notes
+        assertEquals(2, notes.size)
+        assertEquals("День без сети — работал над лабораторной", notes[0].text)
+        assertEquals(now, notes[1].at)
+    }
+
+    @Test
     fun schemaVersionIsCurrent() {
-        assertEquals(3, ExportJson.SCHEMA_VERSION)
+        assertEquals(4, ExportJson.SCHEMA_VERSION)
         assertTrue(ExportJson.encode(sample(), now).contains("\"schemaVersion\""))
     }
 
@@ -160,6 +187,27 @@ class ExportJsonTest {
         assertEquals(1, decoded.bundle.tasks.size)
         assertTrue(decoded.bundle.ideas.isEmpty())
         assertTrue(decoded.bundle.tasks[0].remindOnWindowStart)
+    }
+
+    @Test
+    fun versionThreeExportGetsV4Defaults() {
+        val legacy = """
+            {
+              "schemaVersion": 3,
+              "exportedAt": 1,
+              "tasks": [{"id":1,"title":"T","difficulty":3,"windowStart":0,"deadline":1,
+                         "status":"PLANNED","createdAt":0,"startedAt":null,"closedAt":null}],
+              "attachments": [],
+              "steps": [],
+              "events": [],
+              "ideas": []
+            }
+        """.trimIndent()
+        val decoded = ExportJson.decode(legacy).bundle
+        assertEquals(0, decoded.tasks.single().orderIndex)
+        assertNull(decoded.tasks.single().sprintStartedAt)
+        assertNull(decoded.tasks.single().sprintEndsAt)
+        assertTrue(decoded.notes.isEmpty())
     }
 
     @Test(expected = IllegalArgumentException::class)

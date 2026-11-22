@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.content.IntentCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
+import app.netoverdose.data.ImportResult
 import app.netoverdose.design.LocalDesign
 import app.netoverdose.ui.AppRoot
 import app.netoverdose.ui.components.StarfallSplash
@@ -30,7 +31,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val app = application as NetoverdoseApp
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        handleShare(intent, app)
+        // Only the first creation may consume ACTION_SEND. After a recreation (theme, font
+        // scale, locale, process death) the system can hand the original intent back, and
+        // re-importing it would silently duplicate the task.
+        if (savedInstanceState == null) handleShare(intent, app)
 
         setContent {
             NetoverdoseTheme(app.designController) {
@@ -61,23 +65,41 @@ class MainActivity : ComponentActivity() {
         handleShare(intent, application as NetoverdoseApp)
     }
 
+    /**
+     * A shared file no longer creates a task on the spot (A2): it is copied into private
+     * storage and handed to the intake panel, which is the only place that may persist it.
+     * Extra files from ACTION_SEND_MULTIPLE have no form to live in, so they still go
+     * through the old fire-and-forget import.
+     */
     private fun handleShare(intent: Intent?, app: NetoverdoseApp) {
         val uris = sharedUris(intent ?: return)
         if (uris.isEmpty()) return
         // Consume the intent so a later recreation does not import the same files again.
         setIntent(Intent(Intent.ACTION_MAIN))
         lifecycleScope.launch {
-            val result = app.repository.importShared(uris)
-            val text = when {
-                result.inserted > 0 && result.failed == 0 ->
-                    app.getString(R.string.msg_import_ok, result.inserted)
-                result.inserted == 0 ->
-                    app.getString(R.string.msg_import_fail, result.failed)
-                else ->
-                    app.getString(R.string.msg_import_mixed, result.inserted, result.failed)
-            }
-            app.messages.emit(text)
+            val first = uris.first()
+            val prepared = runCatching { app.repository.prepareShare(first) }
+            prepared.fold(
+                onSuccess = { stored ->
+                    app.pendingShare.emit(stored)
+                    val extra = uris.drop(1)
+                    if (extra.isNotEmpty()) emitImportMessage(app, app.repository.importShared(extra))
+                },
+                onFailure = { emitImportMessage(app, app.repository.importShared(uris)) }
+            )
         }
+    }
+
+    private suspend fun emitImportMessage(app: NetoverdoseApp, result: ImportResult) {
+        val text = when {
+            result.inserted > 0 && result.failed == 0 ->
+                app.getString(R.string.msg_import_ok, result.inserted)
+            result.inserted == 0 ->
+                app.getString(R.string.msg_import_fail, result.failed)
+            else ->
+                app.getString(R.string.msg_import_mixed, result.inserted, result.failed)
+        }
+        app.messages.emit(text)
     }
 
     private fun sharedUris(intent: Intent): List<Uri> = when (intent.action) {

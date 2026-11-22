@@ -1,6 +1,5 @@
 package app.netoverdose.ui.screens
 
-import android.Manifest
 import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -60,6 +59,7 @@ import app.netoverdose.NetoverdoseApp
 import app.netoverdose.R
 import app.netoverdose.data.EventEntity
 import app.netoverdose.design.LocalDesign
+import app.netoverdose.notify.rememberNotificationGate
 import app.netoverdose.ui.components.AccentButton
 import app.netoverdose.ui.components.AppBackground
 import app.netoverdose.ui.components.BrandMark
@@ -99,21 +99,19 @@ class MoreViewModel(application: Application) : AndroidViewModel(application) {
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MoreUiState())
 
     fun setNotifications(enabled: Boolean, permissionDenied: Boolean = false) {
-        app.reminders.enabled = enabled
-        notifications.value = enabled
+        notifications.value = enabled && !permissionDenied
         viewModelScope.launch {
-            if (enabled) {
-                app.reminders.reschedule(repo.openTasksOnce())
+            if (enabled && !permissionDenied) {
+                app.reminders.setEnabled(true, repo.openTasksOnce())
                 app.sounds.tick()
                 app.messages.emit(app.getString(R.string.msg_notifications_on))
+            } else if (!enabled) {
+                app.reminders.setEnabled(false, emptyList())
+                app.messages.emit(app.getString(R.string.msg_notifications_off))
             } else {
-                app.reminders.cancelAll()
-                app.messages.emit(
-                    app.getString(
-                        if (permissionDenied) R.string.msg_permission_denied
-                        else R.string.msg_notifications_off
-                    )
-                )
+                // Denied: the global switch stays off so the UI does not claim reminders work.
+                app.reminders.setEnabled(false, emptyList())
+                app.messages.emit(app.getString(R.string.msg_permission_denied))
             }
         }
     }
@@ -125,7 +123,7 @@ class MoreViewModel(application: Application) : AndroidViewModel(application) {
             val result = runCatching { repo.exportTo(uri) }
             busy.value = false
             result.fold(
-                onSuccess = { app.messages.emit(app.getString(R.string.msg_export_ok, it.tasks, it.files)) },
+                onSuccess = { app.messages.emit(app.getString(R.string.msg_export_ok, it.tasks, it.files, it.notes)) },
                 onFailure = { app.messages.emit(app.getString(R.string.msg_export_failed)) }
             )
         }
@@ -138,7 +136,7 @@ class MoreViewModel(application: Application) : AndroidViewModel(application) {
             val result = runCatching { repo.restoreFrom(uri) }
             busy.value = false
             result.fold(
-                onSuccess = { app.messages.emit(app.getString(R.string.msg_import_done, it.tasks, it.files)) },
+                onSuccess = { app.messages.emit(app.getString(R.string.msg_import_done, it.tasks, it.files, it.notes)) },
                 onFailure = { app.messages.emit(app.getString(R.string.msg_import_failed)) }
             )
         }
@@ -195,24 +193,12 @@ fun MoreScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri -> if (uri != null) pendingImport = uri }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> viewModel.setNotifications(granted, permissionDenied = !granted) }
-
-    fun requestNotifications(enabled: Boolean) {
-        if (!enabled) {
-            viewModel.setNotifications(false)
-            return
-        }
-        val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        if (needsPermission) {
-            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            viewModel.setNotifications(true)
-        }
+    val requestNotifications = rememberNotificationGate { granted ->
+        viewModel.setNotifications(granted, permissionDenied = !granted)
     }
+    // The suggestion on disk is built at click time from the current clock, but the pattern
+    // itself comes from resources; resolving it here keeps LocalContext out of the callback.
+    val exportNamePattern = stringResource(R.string.export_file_name_pattern)
 
     AppBackground {
         Column(
@@ -242,7 +228,7 @@ fun MoreScreen(
                 else stringResource(R.string.more_export_cap),
                 onClick = {
                     exportLauncher.launch(
-                        context.getString(R.string.export_file_name, LocalDate.now().toString())
+                        String.format(exportNamePattern, LocalDate.now().toString())
                     )
                 }
             )

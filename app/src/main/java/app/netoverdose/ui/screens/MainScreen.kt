@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +49,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.netoverdose.NetoverdoseApp
 import app.netoverdose.R
+import app.netoverdose.data.StoredAttachment
 import app.netoverdose.data.TaskItem
 import app.netoverdose.data.nowTicker
 import app.netoverdose.data.toProgress
@@ -201,6 +203,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { repo.reorder(orderedIds) }
     }
 
+    /** Removes a copy made for the intake panel that the user chose not to save. */
+    fun discardAttachment(stored: StoredAttachment) {
+        viewModelScope.launch { repo.discardAttachment(stored) }
+    }
+
     fun start(id: Long) = launchWithMessage({ repo.start(id) }, R.string.msg_started, app.sounds::tick)
     fun close(id: Long) = launchWithMessage({ repo.close(id) }, R.string.msg_closed, app.sounds::complete)
     fun reopen(id: Long) = launchWithMessage({ repo.reopen(id) }, R.string.msg_reopened, app.sounds::tick)
@@ -228,6 +235,19 @@ fun MainScreen(viewModel: MainViewModel = viewModel(), onOpenTask: (Long) -> Uni
     var heroIndex by rememberSaveable { mutableStateOf(0) }
     val palette = LocalDesign.current
     val zone = ZoneId.systemDefault()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val app = context.applicationContext as NetoverdoseApp
+    // A shared file lands here instead of being imported straight into the plan (A2).
+    var sharedAttachment by remember { mutableStateOf<StoredAttachment?>(null) }
+
+    LaunchedEffect(app) {
+        app.pendingShare.collect { stored ->
+            intakeViewModel.reset()
+            intakeViewModel.prefill(stored)
+            sharedAttachment = stored
+            showIntake = true
+        }
+    }
 
     AppBackground {
         LazyColumn(
@@ -384,8 +404,19 @@ fun MainScreen(viewModel: MainViewModel = viewModel(), onOpenTask: (Long) -> Uni
     if (showIntake) {
         IntakeSheet(
             viewModel = intakeViewModel,
-            onDismiss = { showIntake = false },
-            onSaved = { showIntake = false }
+            onDismiss = {
+                showIntake = false
+                // The copy never became a task, so it must not stay in filesDir forever.
+                val stored = sharedAttachment
+                if (stored != null) {
+                    sharedAttachment = null
+                    viewModel.discardAttachment(stored)
+                }
+            },
+            onSaved = {
+                showIntake = false
+                sharedAttachment = null
+            }
         )
     }
 }

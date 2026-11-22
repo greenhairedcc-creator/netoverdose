@@ -4,7 +4,7 @@ enum class TaskStatus { PLANNED, IN_PROGRESS, DONE, POSTPONED }
 
 enum class StepSource { USER, LLM }
 
-enum class EventType { CREATED, STARTED, STEP_DONE, CLOSED, POSTPONED, REOPENED, NOTE }
+enum class EventType { CREATED, STARTED, STEP_DONE, CLOSED, POSTPONED, REOPENED, NOTE, EDITED }
 
 /** Minimal projection used by pure selection rules. */
 interface OpenTask {

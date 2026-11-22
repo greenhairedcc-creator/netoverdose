@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -68,6 +67,7 @@ import app.netoverdose.data.TaskItem
 import app.netoverdose.data.nowTicker
 import app.netoverdose.data.toProgress
 import app.netoverdose.design.LocalDesign
+import app.netoverdose.domain.DeadlineOptions
 import app.netoverdose.domain.Progress
 import app.netoverdose.domain.ProgressTask
 import app.netoverdose.domain.TaskStatus
@@ -83,7 +83,10 @@ import app.netoverdose.ui.components.MiniButton
 import app.netoverdose.ui.components.OutlineButton
 import app.netoverdose.ui.components.PrimaryButton
 import app.netoverdose.ui.components.RainbowHairline
+import app.netoverdose.notify.rememberNotificationGate
 import app.netoverdose.ui.components.SectionLabel
+import app.netoverdose.ui.components.SegmentedControl
+import app.netoverdose.ui.components.SharpSwitch
 import app.netoverdose.ui.components.SharpTextField
 import app.netoverdose.ui.components.StepCheckbox
 import app.netoverdose.ui.components.WaveLabels
@@ -98,6 +101,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.ZoneId
 import kotlin.math.roundToInt
+
+/** "Своя" segment of the deadline selector, same index the intake panel uses. */
+private const val CUSTOM_PICK = 3
 
 data class CardUiState(
     val item: TaskItem? = null,
@@ -127,6 +133,14 @@ class TaskCardViewModel(application: Application, savedState: SavedStateHandle) 
         nowTicker()
     ) { item, steps, now -> CardUiState(item, steps, now) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CardUiState())
+
+    /** Writes back title, difficulty, deadline and the reminder flag (A2). */
+    fun update(title: String, difficulty: Int, deadline: Long, remind: Boolean) {
+        viewModelScope.launch {
+            app.repository.updateTask(taskId, title, difficulty, deadline, remind)
+            app.messages.emit(app.getString(R.string.msg_saved))
+        }
+    }
 
     fun start() = launchWithMessage({ app.repository.start(taskId) }, R.string.msg_started)
     fun close() = launchWithMessage({ app.repository.close(taskId) }, R.string.msg_closed)
@@ -334,6 +348,16 @@ private fun TaskCardBody(viewModel: TaskCardViewModel, onBack: () -> Unit) {
 
             ForecastText(task.toProgress(), state.now)
 
+            val editable = task.status == TaskStatus.PLANNED || task.status == TaskStatus.IN_PROGRESS
+            if (editable) {
+                EditBlock(
+                    task = task,
+                    onSave = { name, level, whenDone, remind ->
+                        viewModel.update(name, level, whenDone, remind)
+                    }
+                )
+            }
+
             // Cost of delay + sprint control for open tasks.
             if (task.status == TaskStatus.PLANNED || task.status == TaskStatus.IN_PROGRESS) {
                 DelayCostBlock(task = task, now = state.now)
@@ -462,6 +486,110 @@ private fun DelayCostBlock(task: TaskEntity, now: Long) {
                 color = palette.danger
             )
         }
+    }
+}
+
+/**
+ * The only place a task's own numbers can change (A2). Without this, a task created from
+ * a share intent could only be deleted and re-created from scratch.
+ */
+@Composable
+private fun EditBlock(
+    task: TaskEntity,
+    onSave: (title: String, difficulty: Int, deadline: Long, remind: Boolean) -> Unit
+) {
+    val palette = LocalDesign.current
+    val zone = ZoneId.systemDefault()
+    var title by rememberSaveable(task.id) { mutableStateOf(task.title) }
+    var difficulty by rememberSaveable(task.id) { mutableStateOf(task.difficulty - 1) }
+    var remind by rememberSaveable(task.id) { mutableStateOf(task.remindOnWindowStart) }
+    var pick by rememberSaveable(task.id) { mutableStateOf(CUSTOM_PICK) }
+    var custom by rememberSaveable(task.id) { mutableStateOf(task.deadline) }
+    val context = LocalContext.current
+    val app = context.applicationContext as NetoverdoseApp
+    val scope = rememberCoroutineScope()
+    // Resolved during composition: reading resources off a LocalContext inside a callback is
+    // exactly the case Compose lint flags, and the message never changes at runtime.
+    val deniedText = stringResource(R.string.msg_permission_denied)
+
+    // First time a reminder is switched on, the global flag and the permission must follow (A4).
+    val gate = rememberNotificationGate { granted ->
+        if (granted) {
+            remind = true
+            scope.launch { app.reminders.setEnabled(true, app.repository.openTasksOnce()) }
+        } else {
+            app.messages.tryEmit(deniedText)
+        }
+    }
+
+    fun resolveDeadline(now: Long): Long = when (pick) {
+        0 -> DeadlineOptions.today(now, zone)
+        1 -> DeadlineOptions.tomorrow(now, zone)
+        2 -> DeadlineOptions.nextMonday(now, zone)
+        else -> custom
+    }
+
+    Column(
+        Modifier.fillMaxWidth().clip(palette.shape).border(1.dp, palette.rule, palette.shape)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SectionLabel(stringResource(R.string.card_edit_label))
+        SharpTextField(
+            value = title,
+            onValueChange = { title = it.take(200) },
+            placeholder = stringResource(R.string.hint_title)
+        )
+        SegmentedControl(
+            options = listOf(
+                stringResource(R.string.deadline_today),
+                stringResource(R.string.deadline_tomorrow),
+                stringResource(R.string.deadline_monday),
+                stringResource(R.string.deadline_custom)
+            ),
+            selected = pick,
+            onSelect = { index ->
+                pick = index
+                if (index != CUSTOM_PICK) custom = resolveDeadline(System.currentTimeMillis())
+            }
+        )
+        if (pick == CUSTOM_PICK) {
+            CustomDateBlock(
+                selected = custom,
+                zone = zone,
+                onSelect = { custom = it }
+            )
+        }
+        SectionLabel(stringResource(R.string.label_difficulty))
+        DifficultyPicker(selected = difficulty, onSelect = { difficulty = it })
+        Text(
+            stringResource(difficultyLabel(difficulty)),
+            style = TextStyle(fontFamily = MonoFamily, fontSize = 10.sp, lineHeight = 15.sp),
+            color = palette.muted
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                stringResource(R.string.label_remind),
+                style = TextStyle(fontFamily = MonoFamily, fontSize = 11.sp),
+                color = palette.text
+            )
+            SharpSwitch(checked = remind, onChange = { value ->
+                if (value) gate(true) else remind = false
+            })
+        }
+        AccentButton(
+            text = stringResource(R.string.action_save),
+            onClick = {
+                onSave(title, difficulty + 1, resolveDeadline(System.currentTimeMillis()), remind)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = title.isNotBlank()
+        )
+        Box(Modifier.height(4.dp))
     }
 }
 
