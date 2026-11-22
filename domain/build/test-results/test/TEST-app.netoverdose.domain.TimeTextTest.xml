@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.netoverdose.domain.TimeTextTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-21T19:19:25.375Z" hostname="WINDOSE20" time="0.02">
+  <properties/>
+  <testcase name="sizeSwitchesUnits" classname="app.netoverdose.domain.TimeTextTest" time="0.002"/>
+  <testcase name="extensionIsUppercaseAndBounded" classname="app.netoverdose.domain.TimeTextTest" time="0.005"/>
+  <testcase name="dayLabelIsRussianCapitalized" classname="app.netoverdose.domain.TimeTextTest" time="0.012"/>
+  <testcase name="overdueIsFlagged" classname="app.netoverdose.domain.TimeTextTest" time="0.001"/>
+  <testcase name="remainingSplitsDaysHoursMinutes" classname="app.netoverdose.domain.TimeTextTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

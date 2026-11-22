@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">netoverdose</string>
+
+    <string name="nav_main">Главная</string>
+    <string name="nav_horizon">Горизонт</string>
+    <string name="nav_stats">Итоги</string>
+    <string name="nav_more">Ещё</string>
+
+    <string name="action_add">+ Задача</string>
+    <string name="action_start">Начать</string>
+    <string name="action_close">Закрыть</string>
+    <string name="action_back">← Назад</string>
+    <string name="action_save">Сохранить</string>
+    <string name="action_delete">Удалить</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_ok">ОК</string>
+    <string name="action_file">Файл</string>
+    <string name="action_card">Карточка задачи →</string>
+    <string name="action_reset">Сброс</string>
+    <string name="action_random">Шанс</string>
+    <string name="action_export">Экспорт</string>
+
+    <string name="section_now">Сейчас в работе</string>
+    <string name="section_plan">Дальше по плану</string>
+    <string name="empty_tasks">Задач пока нет</string>
+    <string name="chip_burning">Горит</string>
+
+    <string name="header_date">%1$s · %2$s</string>
+    <string name="meta_file">%1$s · %2$s</string>
+    <string name="left">Осталось %1$s</string>
+    <string name="overdue">Просрочено %1$s</string>
+    <string name="remaining_dh">%1$dд %2$02dч</string>
+    <string name="remaining_hm">%1$dч %2$02dм</string>
+    <string name="remaining_m">%1$dм</string>
+    <string name="size_kb">%1$s КБ</string>
+    <string name="size_mb">%1$s МБ</string>
+    <string name="file_none">—</string>
+    <string name="file_missing">без файла</string>
+    <string name="difficulty_cd">сложность %1$d из 5</string>
+    <string name="wave_cd">окно прошло на %1$d процентов</string>
+
+    <string name="intake_note">Поделиться → netoverdose. Файл копируется внутрь приложения.</string>
+    <string name="intake_attach">Прикрепить файл</string>
+    <string name="label_title">Название</string>
+    <string name="hint_title">Название задачи</string>
+    <string name="label_deadline">Дедлайн</string>
+    <string name="label_difficulty">Сложность</string>
+    <string name="label_remind">Напомнить о начале окна</string>
+    <string name="deadline_today">Сегодня</string>
+    <string name="deadline_tomorrow">Завтра</string>
+    <string name="deadline_custom">Своя</string>
+    <string name="diff_1">1 — разминка, пятнадцать минут</string>
+    <string name="diff_2">2 — лёгкая, можно между парами</string>
+    <string name="diff_3">3 — средняя, нужен вечер</string>
+    <string name="diff_4">4 — тяжело, придётся сесть надолго</string>
+    <string name="diff_5">5 — марафон, дроби на части</string>
+
+    <string name="delete_title">Удалить задачу?</string>
+    <string name="delete_text">Вложение и записи задачи будут удалены безвозвратно.</string>
+
+    <string name="more_lab">Лаборатория GUI</string>
+    <string name="more_lab_cap">Токены · палитра · фон · движение</string>
+    <string name="more_export">Экспорт данных</string>
+    <string name="more_export_cap">ZIP: export.json и папка files/</string>
+    <string name="more_export_busy">Пишу архив…</string>
+    <string name="more_ideas">Идеи</string>
+    <string name="more_ideas_cap">Трения копятся здесь · %1$d шт</string>
+    <string name="more_notifications">Уведомления</string>
+    <string name="more_notifications_on">Включены · окно и дедлайн за 24 и 3 ч</string>
+    <string name="more_notifications_off">Выключены · напоминания не придут</string>
+    <string name="more_demo">Сбросить демо-данные</string>
+    <string name="more_demo_cap">Вернуть исходные задачи и историю</string>
+    <string name="more_about">О приложении</string>
+    <string name="more_about_cap">netoverdose · сборка 0.3</string>
+    <string name="about_quote">Горизонт вместо тревоги.</string>
+    <string name="about_text">Файл становится задачей с окном и дедлайном. Прогресс считает алгоритм, сложность ставишь только ты.</string>
+    <string name="about_facts">Сборка 0.3 · схема 2 · только локально</string>
+
+    <string name="demo_title">Пересоздать демо-данные?</string>
+    <string name="demo_text">Текущие задачи, вложения и журнал будут стёрты и заменены демонстрационным набором.</string>
+    <string name="demo_attachment_note">Демо-вложение netoverdose. Это заполнитель, а не настоящий файл задачи.</string>
+    <string name="export_file_name">netoverdose-export-%1$s.zip</string>
+
+    <string name="ideas_title">Идеи</string>
+    <string name="ideas_note">Копи ситуации, не функции. Разбор — после двух недель.</string>
+    <string name="ideas_hint">Во что упёрся сегодня…</string>
+    <string name="ideas_empty">Пока ни одного трения.</string>
+    <string name="ideas_add">Добавить</string>
+    <string name="ideas_deleted">Идея удалена</string>
+
+    <string name="notif_channel_name">Напоминания</string>
+    <string name="notif_channel_desc">Начало окна и приближение дедлайна</string>
+    <string name="notif_window_title">Окно открылось</string>
+    <string name="notif_window_text">%1$s — можно садиться</string>
+    <string name="notif_deadline_title">Дедлайн близко</string>
+    <string name="notif_deadline_text">%1$s · осталось около %2$d ч</string>
+
+    <string name="lab_title">Лаборатория GUI</string>
+    <string name="lab_sub">Токены применяются ко всему приложению сразу</string>
+    <string name="lab_hint">Значения хранятся на устройстве. Экспорт отправляет токены текстом через «Поделиться».</string>
+    <string name="group_presets">Пресеты</string>
+    <string name="group_palette">Палитра</string>
+    <string name="group_background">Фон и резкость</string>
+    <string name="group_form">Форма и типографика</string>
+    <string name="group_motion">Движение и свет</string>
+    <string name="preset_ice">Лёд</string>
+    <string name="preset_steel">Сталь</string>
+    <string name="preset_prism">Призма</string>
+    <string name="preset_night">Полярная ночь</string>
+    <string name="ctl_cold">Холод</string>
+    <string name="ctl_hue">Акцент · тон</string>
+    <string name="ctl_rainbow">Радуга</string>
+    <string name="ctl_dark">Тёмная тема</string>
+    <string name="ctl_sharp">Резкость</string>
+    <string name="ctl_grain">Зерно</string>
+    <string name="ctl_grid">Чертёжная сетка</string>
+    <string name="ctl_radius">Радиус</string>
+    <string name="ctl_slant">Наклон грани</string>
+    <string name="ctl_italics">Курсивные акценты</string>
+    <string name="ctl_density">Плотность</string>
+    <string name="ctl_wave">Волна · скорость</string>
+    <string name="ctl_glow">Свечение</string>
+    <string name="density_compact">Компакт</string>
+    <string name="density_normal">Норма</string>
+    <string name="density_airy">Простор</string>
+    <string name="unit_percent">%1$d%%</string>
+    <string name="unit_degree">%1$d°</string>
+    <string name="unit_dp">%1$d dp</string>
+    <string name="unit_static">статика</string>
+
+    <string name="stub_hint">Раздел появится на этапе D</string>
+
+    <string name="msg_import_ok">Принято файлов: %1$d</string>
+    <string name="msg_import_fail">Не удалось скопировать: %1$d</string>
+    <string name="msg_import_mixed">Принято: %1$d, ошибок: %2$d</string>
+    <string name="msg_started">Начато</string>
+    <string name="msg_closed">Закрыто</string>
+    <string name="msg_saved">Задача в плане</string>
+    <string name="msg_deleted">Задача удалена</string>
+    <string name="msg_no_file">Файл не найден</string>
+    <string name="msg_no_app">Нет приложения для этого файла</string>
+    <string name="msg_attach_failed">Не удалось скопировать файл</string>
+    <string name="msg_preset">Пресет применён</string>
+    <string name="msg_random">Случайное оформление</string>
+    <string name="msg_reset">Оформление сброшено</string>
+    <string name="msg_export_ok">Экспорт готов · задач %1$d, файлов %2$d</string>
+    <string name="msg_export_failed">Не удалось записать архив</string>
+    <string name="msg_demo_done">Демо-данные пересозданы</string>
+    <string name="msg_notifications_on">Напоминания включены</string>
+    <string name="msg_notifications_off">Напоминания выключены</string>
+    <string name="msg_permission_denied">Разрешение на уведомления не выдано</string>
+    <string name="msg_idea_added">Идея записана</string>
+    <string name="share_tokens">Токены netoverdose</string>
+
+    <string name="action_confirm">Подтвердить</string>
+
+    <string-array name="demo_titles">
+        <item>Лабораторная №6 — OSPF multi-area</item>
+        <item>Эссе — цифровая этика</item>
+        <item>Презентация к семинару по БД</item>
+        <item>Задачи по матану — ряды</item>
+        <item>Отчёт по практике — требования</item>
+        <item>Лаб №5 — VLAN и trunk</item>
+        <item>Доклад — философия науки</item>
+        <item>Задачи по физике — оптика</item>
+        <item>Реферат — история сетей</item>
+        <item>Лаб №4 — статическая маршрутизация</item>
+        <item>Презентация — English speaking</item>
+    </string-array>
+
+    <string-array name="demo_ideas">
+        <item>Виджет на локскрин: ближайший дедлайн</item>
+        <item>Тёмная тема для ночных сессий</item>
+    </string-array>
+
+    <plurals name="open_count">
+        <item quantity="one">%d открыта</item>
+        <item quantity="few">%d открыты</item>
+        <item quantity="many">%d открыто</item>
+        <item quantity="other">%d открыто</item>
+    </plurals>
+</resources>

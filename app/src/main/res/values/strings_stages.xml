@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tempo_label">Темп</string>
+    <string name="tempo_ahead_head">Идёшь </string>
+    <string name="tempo_ahead_value">с запасом %1$s дня</string>
+    <string name="tempo_behind_head">Отстаёшь </string>
+    <string name="tempo_behind_value">на %1$s дня</string>
+    <string name="tempo_on_time">Идёшь вровень со сроками</string>
+    <string name="tempo_no_data">Пока мало данных</string>
+    <string name="tempo_meta">14 дней · закрыто %1$d · старт ≈ %2$s ч</string>
+    <string name="tempo_meta_no_start">14 дней · закрыто %1$d</string>
+
+    <string name="forecast_open_calm">Темп позволяет успеть без спешки.</string>
+    <string name="forecast_open_tight">Пора садиться — окно почти закрыто.</string>
+    <string name="forecast_open_overdue">Окно закрылось — спасай результат.</string>
+    <string name="forecast_open_lead">Окно закрывается через %1$s. </string>
+    <string name="forecast_open_overdue_lead">Просрочено на %1$s. </string>
+    <string name="forecast_done">Закрыто %1$s. Запас %2$s дня.</string>
+    <string name="forecast_postponed">Отложено. Верни, когда появится час.</string>
+
+    <string name="steps_label">Шаги · %1$d/%2$d</string>
+    <string name="steps_hint">Свой шаг…</string>
+    <string name="steps_add">Добавить шаг</string>
+    <string name="step_cd">шаг: %1$s</string>
+    <string name="step_delete_cd">удалить шаг</string>
+    <string name="msg_step_added">Шаг добавлен</string>
+
+    <string name="action_postpone">Отложить</string>
+    <string name="action_reopen">Вернуть в план</string>
+    <string name="action_reopen_short">Вернуть</string>
+    <string name="msg_postponed">Отложено</string>
+    <string name="msg_reopened">Возвращена в план</string>
+    <string name="section_postponed">Отложено · %1$d</string>
+
+    <string name="horizon_title">Горизонт</string>
+    <string name="horizon_meta">7 дней · задач · %1$d</string>
+    <string name="horizon_today">Сегодня</string>
+    <string name="horizon_soon">Ближайшие 48 часов</string>
+    <string name="horizon_empty">Двое суток свободны. Редкость.</string>
+    <string name="horizon_day_cd">%1$s, задач %2$d</string>
+    <string name="horizon_chip_cd">%1$s · %2$s</string>
+
+    <string name="stats_title">Итоги</string>
+    <string name="stats_meta">Последние 14 дней</string>
+    <string name="stats_reserve_caption">дня среднего запаса · взвешено по сложности</string>
+    <string name="stats_no_data_caption">Закрой хотя бы три задачи — появится число</string>
+    <string name="stats_closed">Закрыто</string>
+    <string name="stats_open">В плане</string>
+    <string name="stats_overdue">Просрочено</string>
+    <string name="stats_median">Медиана старта</string>
+    <string name="stats_hours">%1$s ч</string>
+    <string name="stats_chart">Запас по дням</string>
+    <string name="stats_legend_pos">запас +</string>
+    <string name="stats_legend_neg">просрочка −</string>
+    <string name="stats_legend_none">нет закрытых</string>
+    <string name="stats_recent">Недавно закрыто</string>
+    <string name="stats_recent_empty">Пока пусто.</string>
+    <string name="stats_metrics">Метрики журнала</string>
+    <string name="stats_fast_start">Старт в первые 15 минут</string>
+    <string name="stats_with_reserve">Закрыто с запасом</string>
+    <string name="stats_percent">%1$d%%</string>
+    <string name="stats_dash">—</string>
+    <string name="stats_day_cd">%1$s: закрыто %2$d, запас %3$s</string>
+    <string name="stats_day_empty_cd">%1$s: закрытых нет</string>
+    <string name="reserve_signed">%1$s%2$s</string>
+
+    <string name="more_import">Импорт из экспорта</string>
+    <string name="more_import_cap">ZIP заменит текущие данные</string>
+    <string name="more_import_busy">Читаю архив…</string>
+    <string name="import_title">Восстановить из архива?</string>
+    <string name="import_text">Текущие задачи, вложения, шаги и идеи будут заменены содержимым ZIP.</string>
+    <string name="msg_import_done">Восстановлено · задач %1$d, файлов %2$d</string>
+    <string name="msg_import_failed">Не удалось прочитать архив</string>
+
+    <string name="more_battery">Фоновая работа</string>
+    <string name="more_battery_cap">Если напоминания опаздывают</string>
+    <string name="battery_title">Напоминания и батарея</string>
+    <string name="battery_text">WorkManager не гарантирует точное время: система может отложить работу в режиме экономии. Некоторые прошивки дополнительно ограничивают фоновые приложения.</string>
+    <string name="battery_note">Открой настройки приложения и разреши работу без ограничений батареи, если напоминания приходят с большим опозданием.</string>
+    <string name="battery_action">Открыть настройки</string>
+
+    <string name="a11y_back_cd">назад</string>
+    <string name="a11y_task_cd">задача: %1$s</string>
+    <string name="a11y_switch_cd">переключатель: %1$s</string>
+    <string name="a11y_open_file_cd">открыть вложение</string>
+    <string name="a11y_delete_idea_cd">удалить идею</string>
+
+    <plurals name="days_short">
+        <item quantity="one">%d день</item>
+        <item quantity="few">%d дня</item>
+        <item quantity="many">%d дней</item>
+        <item quantity="other">%d дня</item>
+    </plurals>
+
+    <plurals name="closed_tasks">
+        <item quantity="one">%d закрытая</item>
+        <item quantity="few">%d закрытые</item>
+        <item quantity="many">%d закрытых</item>
+        <item quantity="other">%d закрытых</item>
+    </plurals>
+</resources>

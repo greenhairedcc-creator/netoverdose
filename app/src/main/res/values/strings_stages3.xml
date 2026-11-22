@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ideas_sorted_note">Сортировка по числу повторов. Сначала то, во что упираешься чаще.</string>
+    <string name="ideas_situation_hint">Ситуация: что делал и во что упёрся…</string>
+    <string name="ideas_hits_badge">×%1$d</string>
+    <string name="ideas_bump">+1</string>
+    <string name="ideas_bump_cd">отметить ещё один повтор</string>
+    <string name="ideas_hits_cd">повторов: %1$d</string>
+    <string name="ideas_row_cd">%1$s, повторов %2$d</string>
+    <string name="msg_idea_bumped">Повтор отмечен</string>
+    <string name="a11y_slider_increase">Увеличить</string>
+    <string name="a11y_slider_decrease">Уменьшить</string>
+    <string name="a11y_row_due">дедлайн %1$s</string>
+
+    <string-array name="demo_idea_situations">
+        <item>Смотрел дедлайн лабы в переписке, пока шёл между парами. Открыть приложение ради одной даты неудобно.</item>
+        <item>Сидел над отчётом ночью, светлая тема бьёт по глазам, переключался на тёмную в другой программе.</item>
+    </string-array>
+</resources>
